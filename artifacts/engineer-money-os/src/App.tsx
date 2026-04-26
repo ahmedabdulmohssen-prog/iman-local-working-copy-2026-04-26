@@ -1,4 +1,5 @@
 import { useState } from "react";
+import imanWordmark from "./Assets/iman-wordmark-exact-crop.png";
 
 const API_BASE = "http://localhost:3001";
 
@@ -255,34 +256,34 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-[#0a0a0b] text-zinc-100 antialiased selection:bg-emerald-500/30">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[#0a0a0b] text-zinc-100 antialiased" style={{ selectionBackgroundColor: "rgba(59,130,246,0.35)" }}>
       <div
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
           background:
-            "radial-gradient(60rem 60rem at 80% -20%, rgba(16,185,129,0.06), transparent 60%), radial-gradient(50rem 50rem at -10% 10%, rgba(59,130,246,0.04), transparent 60%)",
+            "radial-gradient(60rem 60rem at 80% -20%, rgba(59,130,246,0.06), transparent 60%), radial-gradient(50rem 50rem at -10% 10%, rgba(59,130,246,0.04), transparent 60%)",
         }}
       />
 
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
-        <header className="flex items-center justify-between mb-6 sm:mb-10 gap-3">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <span className="text-zinc-950 font-black text-sm">$</span>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.22em] text-zinc-500 truncate">
-                IMAN
-              </div>
-              <div className="text-sm sm:text-base font-semibold text-zinc-100 leading-tight truncate">
-                Financial Analyzer
-              </div>
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-16">
+        <header className="mb-8 sm:mb-12 lg:mb-16">
+          <div className="flex items-baseline gap-3 sm:gap-4 mb-2">
+            <img 
+              src={imanWordmark}
+              alt="IMAN Logo"
+              className="h-auto w-40 sm:w-56 lg:w-64"
+              style={{ maxWidth: "260px" }}
+            />
+            <div className="text-lg sm:text-xl lg:text-2xl font-light tracking-widest uppercase">
+              <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 animate-pulse" style={{ backgroundColor: "#3B82F6" }} />
             </div>
           </div>
-          <div className="hidden sm:flex shrink-0 items-center gap-2 text-sm sm:text-[11px] text-zinc-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live model
+          <div className="flex items-center gap-3 text-sm sm:text-base text-zinc-300 mt-4">
+            <span style={{ color: "#3B82F6" }}>Smarter Finances. Stronger Future.</span>
           </div>
+          <p className="text-xs sm:text-sm text-zinc-500 mt-3 max-w-lg leading-relaxed">
+            Find controllable waste, calculate savings, and project long term impact.
+          </p>
         </header>
 
         <div className="flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-5 sm:gap-6 lg:gap-8 lg:items-start min-w-0">
@@ -359,7 +360,7 @@ function App() {
                   <span className="text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500">
                     Invest of savings
                   </span>
-                  <span className="text-xs font-semibold text-emerald-400 tabular-nums">
+                  <span className="text-xs font-semibold tabular-nums" style={{ color: "#3B82F6" }}>
                     {investPct}%
                   </span>
                 </div>
@@ -371,7 +372,7 @@ function App() {
                     step={5}
                     value={investPct}
                     onChange={(e) => setInvestPct(Number(e.target.value))}
-                    className="flex-1 accent-emerald-500"
+                    className="flex-1" style={{ accentColor: "#3B82F6" }}
                   />
                   <input
                     type="number"
@@ -383,7 +384,7 @@ function App() {
                       const n = Number(e.target.value);
                       if (Number.isFinite(n)) setInvestPct(Math.min(100, Math.max(25, n)));
                     }}
-                    className="w-16 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-zinc-100 tabular-nums focus:outline-none focus:border-emerald-500"
+                    className="w-16 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-zinc-100 tabular-nums focus:outline-none" style={{ borderColor: "var(--input-focus-border, #3B82F6)", boxShadow: "0 0 0 2px var(--input-focus-ring, rgba(59,130,246,0.35))" }} onFocus={(e) => { e.currentTarget.style.borderColor = "#3B82F6"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(59,130,246,0.35)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "rgb(39, 39, 42)"; e.currentTarget.style.boxShadow = "none"; }}
                   />
                 </div>
               </div>
@@ -391,7 +392,7 @@ function App() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-950 font-semibold py-3 rounded-xl transition shadow-lg shadow-emerald-500/20"
+                className="w-full disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition shadow-lg" style={{ backgroundColor: "#3B82F6", boxShadow: "0 10px 15px rgba(59,130,246,0.2)" }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#2563EB"; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#3B82F6"; }} onMouseDown={(e) => { e.currentTarget.style.backgroundColor = "#1E40AF"; }} onMouseUp={(e) => { e.currentTarget.style.backgroundColor = "#2563EB"; }}
               >
                 {loading ? (
                   <span className="inline-flex items-center gap-2">
@@ -439,7 +440,7 @@ function EmptyState() {
 function LoadingState() {
   return (
     <div className="bg-zinc-900/30 border border-zinc-800 rounded-2xl p-12 text-center">
-      <div className="w-10 h-10 mx-auto mb-4 border-2 border-zinc-800 border-t-emerald-400 rounded-full animate-spin" />
+      <div className="w-10 h-10 mx-auto mb-4 border-2 border-zinc-800 rounded-full animate-spin" style={{ borderTopColor: "#3B82F6" }} />
       <div className="text-zinc-300 font-medium">Crunching the numbers…</div>
       <div className="text-sm text-zinc-500 mt-1">
         Modeling savings, investments, and 20-year projection.
@@ -517,7 +518,7 @@ function Results({ data }: { data: AnalyzeResponse }) {
               <ul className="space-y-3.5 text-sm text-zinc-200">
                 {opportunities.map((line, i) => (
                   <li key={i} className="flex gap-3">
-                    <span className="mt-2 shrink-0 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                    <span className="mt-2 shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: "#3B82F6", boxShadow: "0 0 8px rgba(59,130,246,0.5)" }} />
                     <span className="leading-relaxed">{line}</span>
                   </li>
                 ))}
@@ -555,12 +556,12 @@ function Results({ data }: { data: AnalyzeResponse }) {
             <Subtile
               label="Monthly"
               value={`$${monthlySavings.toLocaleString()}`}
-              accent="emerald"
+              accent="cyan"
             />
             <Subtile
               label="Yearly"
               value={`$${annualWaste.toLocaleString()}`}
-              accent="emerald"
+              accent="cyan"
             />
           </div>
         </Card>
@@ -594,7 +595,7 @@ function Results({ data }: { data: AnalyzeResponse }) {
                   <div className="text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-1">
                     Monthly contribution
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold text-emerald-400 tabular-nums break-words">
+                  <div className="text-xl sm:text-2xl font-bold tabular-nums break-words" style={{ color: "#3B82F6" }}>
                     ${investAmount.toLocaleString()}
                     <span className="text-sm text-zinc-500 font-normal">/mo</span>
                   </div>
@@ -610,7 +611,7 @@ function Results({ data }: { data: AnalyzeResponse }) {
               </div>
               <div className="mt-3 h-1.5 bg-zinc-800/80 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300"
+                  className="h-full" style={{ background: "linear-gradient(to right, #3B82F6, #60A5FA)" }}
                   style={{ width: `${Math.min(100, Math.max(0, investPct))}%` }}
                 />
               </div>
@@ -633,7 +634,7 @@ function Results({ data }: { data: AnalyzeResponse }) {
       {advisorNote ? (
         <AdvisorCard note={advisorNote} />
       ) : insightsLoading ? (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+        <div className="rounded-2xl p-5" style={{ border: "1px solid rgba(59,130,246,0.2)", backgroundColor: "rgba(59,130,246,0.05)" }}>
           <InsightSkeleton lines={2} />
         </div>
       ) : null}
@@ -644,7 +645,10 @@ function Results({ data }: { data: AnalyzeResponse }) {
 function DifficultyPill({ level }: { level: Difficulty }) {
   const tone =
     level === "Easy"
-      ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/25"
+      ? "border" : "") + (accent === "cyan"
+      ? ""
+      : accent === "blue"
+      ? ""
       : level === "Medium"
         ? "bg-amber-500/10 text-amber-300 border-amber-500/25"
         : "bg-rose-500/10 text-rose-300 border-rose-500/25";
@@ -665,7 +669,7 @@ function PriorityList({ items }: { items: Priority[] }) {
           key={i}
           className="group flex items-start gap-3 bg-zinc-950/50 hover:bg-zinc-950/80 transition border border-zinc-800/60 rounded-xl p-3"
         >
-          <span className="shrink-0 w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-bold flex items-center justify-center tabular-nums">
+          <span className="shrink-0 w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center tabular-nums" style={{ backgroundColor: "rgba(59,130,246,0.15)", color: "#3B82F6" }}>
             {i + 1}
           </span>
           <div className="flex-1 min-w-0">
@@ -674,7 +678,7 @@ function PriorityList({ items }: { items: Priority[] }) {
             </div>
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
               {typeof m.monthlyImpact === "number" && m.monthlyImpact > 0 && (
-                <span className="text-[11px] font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md tabular-nums whitespace-nowrap">
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md tabular-nums whitespace-nowrap border" style={{ color: "#60A5FA", backgroundColor: "rgba(59,130,246,0.1)", borderColor: "rgba(59,130,246,0.2)" }}>
                   +${m.monthlyImpact.toLocaleString()}/mo
                 </span>
               )}
@@ -697,7 +701,7 @@ function InsightSkeleton({
   return (
     <div className={`space-y-3 ${block ? "" : ""}`}>
       <div className="flex items-center gap-2 text-sm sm:text-[11px] text-zinc-500">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: "#3B82F6" }} />
         Generating insights…
       </div>
       <div className="space-y-2">
@@ -726,8 +730,8 @@ function AfterOptimizationCard({
   const afterPos = after >= 0;
   const fmt = (n: number) =>
     `${n >= 0 ? "+" : "−"}$${Math.abs(n).toLocaleString()}`;
-  const beforeColor = beforePos ? "text-emerald-400" : "text-rose-400";
-  const afterColor = afterPos ? "text-emerald-400" : "text-rose-400";
+  const beforeColor = beforePos ? "" : "text-rose-400";
+  const afterColor = afterPos ? "" : "text-rose-400";
   const nearBreakeven = !beforePos && afterPos && after < 100;
   const interpretation = nearBreakeven
     ? "These changes bring you close to breakeven, but leave little margin. Further adjustments are recommended."
@@ -747,17 +751,13 @@ function AfterOptimizationCard({
             Before
           </div>
           <div
-            className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${beforeColor}`}
+            className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${beforeColor}`} style={beforePos ? { color: "#3B82F6" } : {}}
           >
             {fmt(before)}
           </div>
         </div>
         <div
-          className={`shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full border flex items-center justify-center ${
-            afterPos
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-              : "bg-rose-500/10 border-rose-500/30 text-rose-400"
-          }`}
+          className={`shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full border flex items-center justify-center`} style={afterPos ? { backgroundColor: "rgba(59,130,246,0.1)", borderColor: "rgba(59,130,246,0.3)", color: "#3B82F6" } : { backgroundColor: "rgba(244,63,94,0.1)", borderColor: "rgba(244,63,94,0.3)", color: "rgb(248,113,113)" }}
           aria-label="transitions to"
         >
           <svg
@@ -775,17 +775,13 @@ function AfterOptimizationCard({
           </svg>
         </div>
         <div
-          className={`min-w-0 bg-zinc-950/60 border rounded-xl p-3.5 sm:p-4 text-center ${
-            afterPos
-              ? "border-emerald-500/30 shadow-lg shadow-emerald-500/5"
-              : "border-rose-500/30 shadow-lg shadow-rose-500/5"
-          }`}
+          className={`min-w-0 bg-zinc-950/60 rounded-xl p-3.5 sm:p-4 text-center`} style={afterPos ? { border: "1px solid rgba(59,130,246,0.3)", boxShadow: "0 10px 15px rgba(59,130,246,0.05)" } : { border: "1px solid rgba(244,63,94,0.3)", boxShadow: "0 10px 15px rgba(244,63,94,0.05)" }}
         >
           <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">
             After
           </div>
           <div
-            className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${afterColor}`}
+            className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${afterColor}`} style={afterPos ? { color: "#3B82F6" } : {}}
           >
             {fmt(after)}
           </div>
@@ -795,7 +791,7 @@ function AfterOptimizationCard({
         <p
           className={`mt-3 text-xs sm:text-[13px] leading-relaxed ${
             !beforePos && afterPos
-              ? "text-emerald-300"
+              ? "text-cyan-300"
               : !beforePos
                 ? "text-zinc-300"
                 : "text-zinc-400"
@@ -810,16 +806,16 @@ function AfterOptimizationCard({
 
 function AdvisorCard({ note }: { note: string }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 via-emerald-500/[0.04] to-zinc-900/40 p-5 sm:p-6 shadow-xl shadow-emerald-500/5">
-      <div className="absolute -left-16 -top-16 w-56 h-56 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+    <div className="relative overflow-hidden rounded-2xl border border-blue-500/25 bg-gradient-to-br from-blue-500/10 via-blue-500/[0.04] to-zinc-900/40 p-5 sm:p-6 shadow-xl shadow-blue-500/5">
+      <div className="absolute -left-16 -top-16 w-56 h-56 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
       <div className="relative flex items-start gap-3 sm:gap-4">
-        <div className="shrink-0 w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shadow-lg shadow-emerald-500/10">
+        <div className="shrink-0 w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-300 shadow-lg shadow-blue-500/10">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.18em] text-emerald-300/80 font-semibold mb-1.5">
+          <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.18em] text-blue-300/80 font-semibold mb-1.5">
             From your trusted advisor
           </div>
           <p className="text-sm sm:text-[15px] text-zinc-100 leading-relaxed">{note}</p>
@@ -870,8 +866,8 @@ function ScoreCard({
         : score < 70
           ? { text: "text-amber-400", bar: "from-amber-500 via-yellow-400 to-amber-300", chip: "bg-amber-500/15 text-amber-300 border-amber-500/30", glow: "bg-amber-500/10" }
           : score < 85
-            ? { text: "text-emerald-400", bar: "from-emerald-500 via-emerald-400 to-emerald-300", chip: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30", glow: "bg-emerald-500/10" }
-            : { text: "text-emerald-300", bar: "from-emerald-400 via-teal-300 to-emerald-200", chip: "bg-emerald-400/15 text-emerald-200 border-emerald-400/40", glow: "bg-emerald-400/15" };
+            ? { text: "text-cyan-400", bar: "from-blue-500 via-cyan-400 to-cyan-300", chip: "bg-blue-500/15 text-cyan-300 border-blue-500/30", glow: "bg-blue-500/10" }
+            : { text: "text-cyan-300", bar: "from-blue-400 via-cyan-300 to-cyan-200", chip: "bg-blue-400/15 text-cyan-200 border-blue-400/40", glow: "bg-blue-400/15" };
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 to-zinc-900/60 border border-zinc-800 rounded-2xl p-6 sm:p-8 lg:p-10 shadow-2xl shadow-black/40">
@@ -943,7 +939,7 @@ function StatCard({
       : tone === "warning"
         ? "text-orange-400"
         : tone === "positive"
-          ? "text-emerald-400"
+          ? "text-cyan-400"
           : "text-rose-400";
   const arrowColor =
     tone === "neutral"
@@ -951,7 +947,7 @@ function StatCard({
       : tone === "warning"
         ? "text-orange-400"
         : tone === "positive"
-          ? "text-emerald-400"
+          ? "text-cyan-400"
           : "text-rose-400";
   const arrow =
     tone === "neutral"
@@ -989,7 +985,7 @@ function Card({
 }) {
   return (
     <div
-      className={`min-w-0 bg-zinc-900/70 border ${accent ? "border-emerald-500/30" : "border-zinc-800"} rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-700 hover:shadow-black/30 transition`}
+      className={`min-w-0 bg-zinc-900/70 border ${accent ? "border-blue-500/30" : "border-zinc-800"} rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-700 hover:shadow-black/30 transition`}
     >
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm font-semibold text-zinc-100">{title}</div>
@@ -1009,9 +1005,9 @@ function Subtile({
 }: {
   label: string;
   value: string;
-  accent?: "emerald";
+  accent?: "cyan" | "blue";
 }) {
-  const valueColor = accent === "emerald" ? "text-emerald-400" : "text-zinc-100";
+  const valueColor = accent === "cyan" || accent === "blue" ? "text-cyan-400" : "text-zinc-100";
   return (
     <div className="min-w-0 bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5 sm:p-4">
       <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">{label}</div>
@@ -1033,14 +1029,14 @@ function ProjectionTile({
     <div
       className={`min-w-0 relative bg-zinc-950/60 border rounded-xl p-3 sm:p-4 text-center ${
         highlight
-          ? "border-emerald-500/40 shadow-lg shadow-emerald-500/10"
+          ? "border-blue-500/40 shadow-lg shadow-blue-500/10"
           : "border-zinc-800/80"
       }`}
     >
       <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">{years}</div>
       <div
         className={`text-base sm:text-lg lg:text-xl font-bold tabular-nums break-words ${
-          highlight ? "text-emerald-400" : "text-zinc-100"
+          highlight ? "text-cyan-400" : "text-zinc-100"
         }`}
       >
         ${value.toLocaleString()}
@@ -1074,7 +1070,7 @@ function SingleField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-7 pr-3 py-2.5 text-zinc-100 placeholder-zinc-700 tabular-nums focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition"
+          className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-7 pr-3 py-2.5 text-zinc-100 placeholder-zinc-700 tabular-nums focus:outline-none focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 transition"
         />
       </div>
     </label>
@@ -1124,7 +1120,7 @@ function CategoryCard({
       : "text-zinc-300 text-sm sm:text-[11px]";
   const cardBorderClass =
     priority === "high"
-      ? "border-emerald-500/20"
+      ? "border-blue-500/20"
       : priority === "low"
         ? "border-zinc-800/60"
         : "border-zinc-800/80";
@@ -1149,7 +1145,7 @@ function CategoryCard({
           </span>
           {priority === "high" && (
             <span
-              className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"
+              className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0"
               aria-hidden
             />
           )}
@@ -1180,7 +1176,7 @@ function CategoryCard({
                     onChange={(e) => update(idx, "name", e.target.value)}
                     onBlur={(e) => onNameBlur(idx, e.target.value)}
                     placeholder="Item name"
-                    className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-emerald-500/60 transition"
+                    className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-blue-500/60 transition"
                   />
                   <div className="relative w-20 sm:w-24 shrink-0 min-w-0">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600 text-sm">
@@ -1193,7 +1189,7 @@ function CategoryCard({
                       value={it.amount}
                       onChange={(e) => update(idx, "amount", e.target.value)}
                       placeholder="0"
-                      className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-6 pr-2 py-2 text-sm text-zinc-100 placeholder-zinc-700 tabular-nums focus:outline-none focus:border-emerald-500/60 transition"
+                      className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg pl-6 pr-2 py-2 text-sm text-zinc-100 placeholder-zinc-700 tabular-nums focus:outline-none focus:border-blue-500/60 transition"
                     />
                   </div>
                   <button
@@ -1216,7 +1212,7 @@ function CategoryCard({
                   key={s}
                   type="button"
                   onClick={() => addNamed(s)}
-                  className="text-sm sm:text-[11px] px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-emerald-300 hover:border-emerald-500/40 transition"
+                  className="text-sm sm:text-[11px] px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-cyan-300 hover:border-blue-500/40 transition"
                 >
                   + {s}
                 </button>
@@ -1227,7 +1223,7 @@ function CategoryCard({
           <button
             type="button"
             onClick={addBlank}
-            className="text-sm sm:text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition"
+            className="text-sm sm:text-[11px] font-medium text-cyan-400 hover:text-cyan-300 transition"
           >
             + Add item
           </button>
