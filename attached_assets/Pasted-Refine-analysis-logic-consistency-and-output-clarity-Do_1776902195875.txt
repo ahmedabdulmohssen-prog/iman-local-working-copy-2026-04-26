@@ -1,0 +1,132 @@
+Refine analysis logic, consistency, and output clarity. Do not change core calculations or UI structure.
+
+========================
+CORE RULES
+========================
+
+1) All financial calculations must be deterministic:
+- Monthly savings = sum of all recommended reductions
+- Yearly savings = monthly savings × 12
+- After Optimization = current net cash flow + monthly savings
+- These values must NEVER depend on AI-generated text
+
+2) Same inputs must always produce the same outputs
+
+========================
+RECOMMENDED ACTIONS
+========================
+
+3) Actions must be:
+- Specific and measurable
+- Use exact values or clear ranges (~$X)
+- Avoid vague wording:
+  - NO "about", "roughly", "lower frequency", "reduce somewhat"
+
+4) Each action must:
+- Target ONE category only
+- Not mix categories (no combining subscriptions + misc, etc.)
+
+5) Actions must be sorted by highest savings first
+
+6) Maintain realism:
+- No category reduced by more than 50%
+- Eating out:
+  - Reduce 40–60% max
+  - If reduced significantly, increase groceries slightly
+- Services:
+  - Reduce frequency (20–50%), not eliminate
+- Subscriptions:
+  - Reduce count, not remove all
+  - Do NOT name brands
+
+========================
+DEFICIT HANDLING
+========================
+
+7) If net cash flow < 0:
+- Show deficit warning at top:
+  "You are currently running a monthly deficit. Priority is to eliminate this gap."
+
+8) Investment:
+- Disable projections
+- Show:
+  "Focus on eliminating your deficit before investing."
+
+9) Increase optimization strength slightly:
+- Aim for meaningful improvement
+- Prefer moving toward a surplus with buffer when realistic
+
+========================
+AFTER OPTIMIZATION LOGIC
+========================
+
+10) Always show:
+Before (current net)
+After (projected net)
+
+11) Add interpretation:
+
+- If result becomes positive:
+  "These changes move you from a deficit to a surplus."
+
+- If result is positive but < $100:
+  "These changes bring you close to breakeven, but leave little margin. Further adjustments are recommended."
+
+- If still negative:
+  "These changes reduce your deficit, but further adjustments are needed."
+
+========================
+POTENTIAL SAVINGS
+========================
+
+12) Label:
+"Potential Savings Opportunity"
+
+13) Subtitle:
+"Estimated annualized amount you can recover by closing your spending gap"
+
+14) This must match yearly savings exactly
+
+========================
+OPTIMIZATION OPPORTUNITIES
+========================
+
+15) Keep concise and consistent tone:
+- Example:
+  "Eating out significantly exceeds groceries; shifting this will close most of the gap."
+  "Multiple overlapping subscriptions increase recurring cost."
+  "Service spending is a large share of income; reducing frequency will free cash."
+
+========================
+ADVISOR SECTION
+========================
+
+16) Tone must adapt:
+
+- Surplus:
+  supportive and optimizing
+
+- Moderate:
+  advisory and improvement-focused
+
+- Deficit:
+  direct but supportive
+
+17) Keep:
+- 2–3 sentences max
+- Clear next step
+
+18) For deficit:
+Include:
+"Aim to bring your net cash flow back to positive within 60–90 days."
+
+========================
+CONSISTENCY CHECKS
+========================
+
+19) Ensure:
+- Monthly × 12 = Yearly always
+- Savings matches actions
+- No contradictions between sections
+
+20) Never degrade recommendation strength across runs

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Engineer Money OS"
+version = "1.0.0"
+id = "artifacts/engineer-money-os"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18200
+
+[services.development]
+run = "pnpm --filter @workspace/engineer-money-os run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/engineer-money-os", "run", "build" ]
+publicDir = "artifacts/engineer-money-os/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18200"
+BASE_PATH = "/"

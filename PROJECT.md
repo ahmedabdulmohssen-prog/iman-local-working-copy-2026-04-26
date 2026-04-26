@@ -1,0 +1,191 @@
+PROJECT: IMAN
+
+========================
+PURPOSE
+========================
+
+A financial decision engine that:
+- Analyzes income vs expenses
+- Identifies inefficiencies
+- Generates deterministic recommendations
+- Shows clear before/after financial impact
+
+NOT a budgeting tracker.
+Focused on decision-making and optimization.
+
+========================
+CURRENT SYSTEM STATE
+========================
+
+INPUT SYSTEM
+- 9 fixed categories:
+  Housing, Food, Utilities, Transportation, Services, Subscriptions, Debt, Personal, Misc
+
+- Each category:
+  - Multiple items (name + monthly value)
+  - Category totals calculated
+  - No custom top-level categories allowed
+
+- Validation:
+  - No empty names
+  - No zero/negative values
+  - Typo normalization (e.g., laundary → laundry)
+
+UI
+- Accordion-based layout
+- Fixed category order:
+  Housing → Food → Utilities → Transportation → Services → Subscriptions → Debt → Personal → Misc
+- Stable rendering (no DOM reordering)
+- Category totals shown when > 0
+- Visual hierarchy via card styling
+
+ENGINE (DETERMINISTIC)
+- Net Cash Flow = income − total expenses
+- Monthly Savings = sum of all recommended reductions
+- Yearly Savings = monthly × 12
+- After Optimization = net cash flow + monthly savings
+
+RULE:
+Same input MUST always produce same output
+
+========================
+RECOMMENDATION SYSTEM
+========================
+
+HYBRID MODEL:
+
+1) Quantitative Actions (with $ savings)
+- Food
+- Services
+- Subscriptions
+- Misc
+- Personal (conditional)
+
+2) Advisory Actions (no $)
+- Debt
+- Transportation
+- Utilities
+
+RULES:
+- Max 3–5 actions
+- Sorted by impact
+- No fake/filler actions
+- No vague language
+- No unrealistic cuts
+
+CATEGORY PRIORITY:
+- High impact: Housing, Transportation, Debt
+- Medium: Utilities, Food, Services
+- Low: Subscriptions, Personal, Misc
+
+========================
+DEFICIT LOGIC
+========================
+
+If net cash flow < 0:
+- Show deficit warning
+- Pause investing
+- Increase optimization strength
+
+After Optimization must show:
+- Before vs After clearly
+
+========================
+OUTPUT STRUCTURE
+========================
+
+- Financial Score
+- Net Cash Flow
+- Weekly Safe Spend
+- Potential Savings Opportunity
+- Optimization Opportunities
+- Recommended Actions
+- Savings Impact
+- After Optimization (Before/After)
+- Investment Plan (or paused)
+- Trusted Advisor summary
+
+========================
+KEY RULES
+========================
+
+- Calculations are deterministic (NOT AI)
+- AI only handles:
+  - wording
+  - explanation
+  - advisory insight
+
+- Savings MUST match actions exactly
+- Monthly × 12 = Yearly always
+- No contradictions
+
+========================
+CURRENT FOCUS
+========================
+
+Refining recommendation intelligence
+
+NOT working on:
+- UI redesign
+- new features
+
+FOCUS:
+- prioritization
+- accuracy
+- trust
+
+========================
+ACTIVE TEST
+========================
+
+High Debt + High Transportation scenario
+
+Goal:
+Ensure system prioritizes real financial weight
+
+Must verify:
+- Debt appears in recommendations
+- Transportation appears
+- Food is NOT incorrectly #1
+- Output is realistic and strong
+- After Optimization is meaningful
+
+========================
+BACKLOG
+========================
+
+1) Improve advisory quality
+- More specific
+- Include reasoning
+- Keep concise
+
+2) Category-aware prioritization
+- Ensure debt/transportation not ignored
+- Avoid over-prioritizing easy cuts
+
+3) Consistency enforcement
+- Same input = same output
+- Savings always match actions
+
+4) Threshold transparency (future)
+- Show why actions triggered (% of income)
+
+5) Legal category alignment (future)
+- Match financial statement structures
+
+6) Input normalization improvements
+- Expand typo handling
+
+7) Performance stability
+- Target < 2–3 seconds
+
+========================
+NEXT STEP
+========================
+
+Run high-debt test case and verify:
+- Top actions
+- Debt presence
+- Transportation presence
+- Correct prioritization
+- After Optimization result
