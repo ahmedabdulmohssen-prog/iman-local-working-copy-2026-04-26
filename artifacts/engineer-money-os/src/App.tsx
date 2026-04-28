@@ -308,6 +308,28 @@ function App() {
                 placeholder="9500"
               />
 
+              <div>
+                <label className="block text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-2">
+                  Credit Score Range
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {["300–579", "580–669", "670–739", "740–799", "800–850"].map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() => setCreditScoreRange(range)}
+                      className={`py-2 px-2 sm:px-1.5 text-xs sm:text-[10px] font-semibold rounded-lg border transition ${
+                        creditScoreRange === range
+                          ? "bg-blue-600 border-blue-500 text-zinc-950"
+                          : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-blue-500/60 hover:text-blue-300"
+                      }`}
+                    >
+                      {range}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <SingleField
                   label="Savings Balance"
