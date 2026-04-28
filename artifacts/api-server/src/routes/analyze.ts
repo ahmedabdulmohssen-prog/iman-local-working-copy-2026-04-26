@@ -386,8 +386,6 @@ function buildLongTerm(opts: {
 
 function computeTotals(body: any) {
   const income = Number(body?.income) || 0;
-  const savingsBalance = Math.max(0, Number(body?.savingsBalance) || 0);
-  const monthlyInvesting = Math.max(0, Number(body?.monthlyInvesting) || 0);
   const categories = normalizeCategories(body?.categories);
 
   // Map structured categories to the (unchanged) analysis variables.
@@ -511,40 +509,45 @@ function computeTotals(body: any) {
     ? 0
     : Math.round(monthlySavings * (investPct / 100));
 
-  // ===== Weighted Financial Health Score (0–100) =====
+  // ===== Weighted Financial Efficiency Score (0–100) =====
 
-  // 1) Savings Rate (40 pts) — Primary indicator of financial health
+  // 1) Income Retention / Surplus Ratio (40 pts)
   const savingsRate = income > 0 ? netCashFlow / income : 0;
   let savingsRatePts = 0;
   if (savingsRate >= 0.3) savingsRatePts = 40;
-  else if (savingsRate >= 0.2) savingsRatePts = 30;
-  else if (savingsRate >= 0.1) savingsRatePts = 18;
-  else if (savingsRate >= 0.01) savingsRatePts = 6;
+  else if (savingsRate >= 0.2) savingsRatePts = 32;
+  else if (savingsRate >= 0.1) savingsRatePts = 20;
+  else if (savingsRate >= 0.05) savingsRatePts = 10;
+  else if (savingsRate >= 0.01) savingsRatePts = 4;
 
-  // 2) Housing Cost Ratio (20 pts) — Fixed cost burden
+  // 2) Housing Burden Ratio (20 pts)
   const housingRatio = income > 0 ? housingTotal / income : 1;
   let housingPts = 0;
   if (housingRatio < 0.25) housingPts = 20;
   else if (housingRatio < 0.35) housingPts = 14;
   else if (housingRatio < 0.45) housingPts = 8;
 
-  // 3) Lifestyle Leakage (15 pts) — Food + Subscriptions + Misc discretionary spending
-  const leakageTotal = foodTotal + subscriptionsTotal + otherTotal;
+  // 3) Leak Count (15 pts) — ratio-aware visible spending patterns that trigger.
+  const leakSignals = [
+    eatingOut > groceries && eatingOut > Math.max(0.04 * income, 200),
+    subscriptions.length > 2 && subscriptionsTotal > Math.max(0.02 * income, 75),
+    income > 0 && servicesTotal > 0.1 * income,
+    otherTotal > Math.max(0.03 * income, 150),
+    personalTotal > Math.max(0.08 * income, 300),
+  ].filter(Boolean).length;
+  let leakCountPts = 0;
+  if (leakSignals === 0) leakCountPts = 15;
+  else if (leakSignals === 1) leakCountPts = 11;
+  else if (leakSignals === 2) leakCountPts = 7;
+  else if (leakSignals === 3) leakCountPts = 3;
+
+  // 4) Leak Severity (15 pts) — discretionary leak total as share of income.
+  const leakageTotal = foodTotal + subscriptionsTotal + servicesTotal + personalTotal + otherTotal;
   const leakageRatio = income > 0 ? leakageTotal / income : 1;
   let leakagePts = 0;
-  if (leakageRatio < 0.15) leakagePts = 15;
-  else if (leakageRatio <= 0.25) leakagePts = 8;
-
-  // 4) Emergency Buffer (15 pts) — savingsBalance / monthly expenses
-  // Min 2 pts even without buffer: acknowledges strong ongoing cash flow can build it
-  const monthsCovered =
-    totalExpenses > 0 ? savingsBalance / totalExpenses : 0;
-  let bufferPts = 0;
-  if (monthsCovered >= 6) bufferPts = 15;
-  else if (monthsCovered >= 3) bufferPts = 10;
-  else if (monthsCovered >= 1) bufferPts = 5;
-  else if (monthsCovered > 0) bufferPts = 2;
-  else bufferPts = 0;
+  if (leakageRatio < 0.1) leakagePts = 15;
+  else if (leakageRatio < 0.2) leakagePts = 11;
+  else if (leakageRatio <= 0.3) leakagePts = 6;
 
   // 5) Debt Burden (10 pts) — Risk from outstanding debt obligations
   const debtRatio = income > 0 ? debtTotal / income : 0;
@@ -553,10 +556,8 @@ function computeTotals(body: any) {
   else if (debtRatio < 0.1) debtPts = 7;
   else if (debtRatio < 0.2) debtPts = 4;
 
-  const score = Math.max(
-    0,
-    Math.min(100, savingsRatePts + housingPts + leakagePts + bufferPts + debtPts),
-  );
+  const rawScore = savingsRatePts + housingPts + leakCountPts + leakagePts + debtPts;
+  const score = Math.max(0, Math.min(totalExpenses > 0 ? 99 : 100, rawScore));
 
   const scoreLabel =
     score >= 88
@@ -574,30 +575,30 @@ function computeTotals(body: any) {
     income <= 0
       ? "Add your monthly income to score this."
       : savingsRate <= 0
-        ? `You're spending all you earn — net leftover is ${pct(savingsRate)}. Free up at least 10% to start building.`
-        : `Your monthly leftover is ${pct(savingsRate)} of income — aim for 20%+ to gain real momentum.`;
+        ? `You're spending all you earn — net leftover is ${pct(savingsRate)}. Retain at least 10% to start building.`
+        : `Your monthly surplus is ${pct(savingsRate)} of income — aim for 20%+ to gain real momentum.`;
   const explainHousing = () =>
     income <= 0 || housingTotal <= 0
       ? "Add your housing cost to score this."
       : `Housing takes ${pct(housingRatio)} of your income — under 25% gives you the most flexibility.`;
+  const explainLeakCount = () =>
+    leakSignals === 0
+      ? "No major spending leaks are triggering from your visible inputs."
+      : `${leakSignals} spending leak${leakSignals === 1 ? "" : "s"} triggered — fewer active leaks means cleaner monthly efficiency.`;
   const explainLeakage = () =>
     income <= 0
       ? "Add your monthly income to score this."
-      : `Food, subscriptions and misc make up ${pct(leakageRatio)} of income — under 15% frees real cash for goals.`;
-  const explainBuffer = () =>
-    savingsBalance <= 0
-      ? "Add your savings balance to score this — aim for 3+ months of expenses as a starting buffer."
-      : `Your savings cover ${monthsCovered.toFixed(1)} months of expenses — target 3+ months to weather surprises, 6+ for full security.`;
+      : `Food, services, subscriptions, personal and misc make up ${pct(leakageRatio)} of income — under 10% keeps spending highly efficient.`;
   const explainDebt = () =>
     debtTotal <= 0
       ? "No debt — financial flexibility at full strength."
       : `Debt obligations are ${pct(debtRatio)} of income — under 10% keeps strategic flexibility.`;
 
   const scoreBreakdown = [
-    { name: "Savings Rate", points: savingsRatePts, max: 40, explanation: explainSavings() },
-    { name: "Housing Cost Ratio", points: housingPts, max: 20, explanation: explainHousing() },
-    { name: "Lifestyle Leakage", points: leakagePts, max: 15, explanation: explainLeakage() },
-    { name: "Emergency Buffer", points: bufferPts, max: 15, explanation: explainBuffer() },
+    { name: "Income Retention", points: savingsRatePts, max: 40, explanation: explainSavings() },
+    { name: "Housing Burden", points: housingPts, max: 20, explanation: explainHousing() },
+    { name: "Leak Count", points: leakCountPts, max: 15, explanation: explainLeakCount() },
+    { name: "Leak Severity", points: leakagePts, max: 15, explanation: explainLeakage() },
     { name: "Debt Burden", points: debtPts, max: 10, explanation: explainDebt() },
   ];
 

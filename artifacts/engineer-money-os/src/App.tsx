@@ -132,8 +132,6 @@ function buildDefaultCategories(): Record<CategoryName, Item[]> {
 
 function App() {
   const [income, setIncome] = useState("");
-  const [savingsBalance, setSavingsBalance] = useState("");
-  const [monthlyInvesting, setMonthlyInvesting] = useState("");
   const [creditScoreRange, setCreditScoreRange] = useState("740–799");
   const [categories, setCategories] = useState<Record<CategoryName, Item[]>>(
     buildDefaultCategories(),
@@ -195,8 +193,6 @@ function App() {
 
     const payload = {
       income: incomeNum,
-      savingsBalance: Math.max(0, Number(savingsBalance) || 0),
-      monthlyInvesting: Math.max(0, Number(monthlyInvesting) || 0),
       creditScoreRange,
       categories: payloadCategories,
       investPct: Number(investPct) || 0,
@@ -380,21 +376,6 @@ function App() {
                     </div>
                   );
                 })()}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <SingleField
-                  label="Savings Balance"
-                  value={savingsBalance}
-                  onChange={setSavingsBalance}
-                  placeholder="optional"
-                />
-                <SingleField
-                  label="Monthly Investing"
-                  value={monthlyInvesting}
-                  onChange={setMonthlyInvesting}
-                  placeholder="optional"
-                />
               </div>
 
               <div className="flex items-center justify-between">
