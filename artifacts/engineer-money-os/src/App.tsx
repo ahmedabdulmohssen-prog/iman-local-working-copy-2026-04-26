@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import imanWordmark from "./Assets/iman-wordmark.png";
 
 const API_BASE = "http://localhost:3001";
@@ -312,22 +312,74 @@ function App() {
                 <label className="block text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-2">
                   Credit Score Range
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  {["300–579", "580–669", "670–739", "740–799", "800–850"].map((range) => (
-                    <button
-                      key={range}
-                      type="button"
-                      onClick={() => setCreditScoreRange(range)}
-                      className={`py-2 px-2 sm:px-1.5 text-xs sm:text-[10px] font-semibold rounded-lg border transition ${
-                        creditScoreRange === range
-                          ? "bg-blue-600 border-blue-500 text-zinc-950"
-                          : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-blue-500/60 hover:text-blue-300"
-                      }`}
-                    >
-                      {range}
-                    </button>
-                  ))}
-                </div>
+                
+                {(() => {
+                  const ranges = ["300–579", "580–669", "670–739", "740–799", "800–850"];
+                  const labels = ["Poor", "Fair", "Good", "Very Good", "Excellent"];
+                  const currentIndex = ranges.indexOf(creditScoreRange);
+                  
+                  return (
+                    <div className="space-y-3">
+                      <style>{`
+                        .credit-score-slider {
+                          appearance: none;
+                          -webkit-appearance: none;
+                          width: 100%;
+                          height: 6px;
+                          border-radius: 9999px;
+                          background: rgb(63, 63, 70);
+                          outline: none;
+                          cursor: pointer;
+                        }
+                        .credit-score-slider::-webkit-slider-thumb {
+                          appearance: none;
+                          -webkit-appearance: none;
+                          width: 16px;
+                          height: 16px;
+                          border-radius: 50%;
+                          background: rgb(59, 130, 246);
+                          cursor: pointer;
+                          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+                        }
+                        .credit-score-slider::-moz-range-track {
+                          background: transparent;
+                          border: none;
+                        }
+                        .credit-score-slider::-moz-range-progress {
+                          background: rgb(59, 130, 246);
+                          height: 6px;
+                          border-radius: 9999px;
+                        }
+                        .credit-score-slider::-moz-range-thumb {
+                          width: 16px;
+                          height: 16px;
+                          border-radius: 50%;
+                          background: rgb(59, 130, 246);
+                          cursor: pointer;
+                          border: none;
+                          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+                        }
+                      `}</style>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        step="1"
+                        value={currentIndex + 1}
+                        onChange={(e) => {
+                          const idx = Number(e.target.value) - 1;
+                          setCreditScoreRange(ranges[idx]);
+                        }}
+                        className="credit-score-slider"
+                      />
+                      <div className="text-center">
+                        <div className="text-sm sm:text-[12px] font-semibold text-zinc-100">
+                          {labels[currentIndex]} ({creditScoreRange})
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -391,7 +443,7 @@ function App() {
                     step={5}
                     value={investPct}
                     onChange={(e) => setInvestPct(Number(e.target.value))}
-                    className="flex-1 accent-blue-500"
+                    className="flex-1 credit-score-slider"
                   />
                   <input
                     type="number"
@@ -880,16 +932,37 @@ function ScoreCard({
   label: string;
   weakest?: { name: string; points: number; max: number; explanation: string };
 }) {
-  // Tone aligned with new label buckets: Critical (<40), Risk Zone (40-54),
-  // Stable but Leaking (55-69), Strong (70-84), Elite (85+).
+  const [displayScore, setDisplayScore] = useState(0);
+
+  useEffect(() => {
+    const startTime = performance.now();
+    const duration = 1100; // 1.1 seconds
+    const easeOutQuad = (t: number) => 1 - (1 - t) * (1 - t);
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = easeOutQuad(progress);
+      setDisplayScore(Math.round(eased * score));
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [score]);
+
+  // Tone aligned with new label buckets: Critical (<45), Risk Zone (45-59),
+  // Stable but Leaking (60-74), Strong (75-87), Elite (88+).
   const tone =
-    score < 40
+    score < 45
       ? { text: "text-rose-400", bar: "from-rose-500 via-rose-400 to-rose-300", chip: "bg-rose-500/15 text-rose-300 border-rose-500/30", glow: "bg-rose-500/10" }
-      : score < 55
+      : score < 60
         ? { text: "text-orange-400", bar: "from-orange-500 via-orange-400 to-amber-300", chip: "bg-orange-500/15 text-orange-300 border-orange-500/30", glow: "bg-orange-500/10" }
-        : score < 70
+        : score < 75
           ? { text: "text-amber-400", bar: "from-amber-500 via-yellow-400 to-amber-300", chip: "bg-amber-500/15 text-amber-300 border-amber-500/30", glow: "bg-amber-500/10" }
-          : score < 85
+          : score < 88
             ? { text: "text-blue-500", bar: "from-blue-500 via-blue-400 to-blue-300", chip: "bg-blue-500/15 text-blue-300 border-blue-500/18", glow: "bg-blue-500/10" }
             : { text: "text-blue-300", bar: "from-blue-400 via-teal-300 to-blue-200", chip: "bg-blue-400/15 text-blue-200 border-blue-400/24", glow: "bg-blue-400/15" };
 
@@ -902,7 +975,7 @@ function ScoreCard({
           Financial Score
         </div>
         <div className={`text-7xl sm:text-8xl lg:text-9xl font-black leading-none tabular-nums tracking-tight ${tone.text}`}>
-          {score}
+          {displayScore}
           <span className="text-2xl sm:text-3xl text-zinc-700 font-bold align-top ml-1">/100</span>
         </div>
         <div className="mt-4">
@@ -914,15 +987,15 @@ function ScoreCard({
           <div className="h-1.5 bg-zinc-800/80 rounded-full overflow-hidden">
             <div
               className={`h-full bg-gradient-to-r ${tone.bar} rounded-full transition-all duration-700`}
-              style={{ width: `${Math.max(2, Math.min(100, score))}%` }}
+              style={{ width: `${Math.max(2, Math.min(100, displayScore))}%` }}
             />
           </div>
           <div className="flex justify-between text-[13px] sm:text-[10px] text-zinc-600 mt-2 tabular-nums">
             <span>0</span>
-            <span>40</span>
-            <span>55</span>
-            <span>70</span>
-            <span>85</span>
+            <span>45</span>
+            <span>60</span>
+            <span>75</span>
+            <span>88</span>
             <span>100</span>
           </div>
         </div>

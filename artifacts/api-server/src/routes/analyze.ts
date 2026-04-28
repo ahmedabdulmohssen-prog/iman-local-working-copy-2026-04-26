@@ -513,56 +513,59 @@ function computeTotals(body: any) {
 
   // ===== Weighted Financial Health Score (0–100) =====
 
-  // 1) Savings Rate (30 pts)
+  // 1) Savings Rate (40 pts) — Primary indicator of financial health
   const savingsRate = income > 0 ? netCashFlow / income : 0;
   let savingsRatePts = 0;
-  if (savingsRate >= 0.3) savingsRatePts = 30;
-  else if (savingsRate >= 0.2) savingsRatePts = 22;
-  else if (savingsRate >= 0.1) savingsRatePts = 12;
-  else if (savingsRate >= 0.01) savingsRatePts = 5;
+  if (savingsRate >= 0.3) savingsRatePts = 40;
+  else if (savingsRate >= 0.2) savingsRatePts = 30;
+  else if (savingsRate >= 0.1) savingsRatePts = 18;
+  else if (savingsRate >= 0.01) savingsRatePts = 6;
 
-  // 2) Housing Cost Ratio (20 pts)
+  // 2) Housing Cost Ratio (20 pts) — Fixed cost burden
   const housingRatio = income > 0 ? housingTotal / income : 1;
   let housingPts = 0;
   if (housingRatio < 0.25) housingPts = 20;
   else if (housingRatio < 0.35) housingPts = 14;
   else if (housingRatio < 0.45) housingPts = 8;
 
-  // 3) Lifestyle Leakage (20 pts) — Food + Subscriptions + Misc
+  // 3) Lifestyle Leakage (15 pts) — Food + Subscriptions + Misc discretionary spending
   const leakageTotal = foodTotal + subscriptionsTotal + otherTotal;
   const leakageRatio = income > 0 ? leakageTotal / income : 1;
   let leakagePts = 0;
-  if (leakageRatio < 0.15) leakagePts = 20;
-  else if (leakageRatio <= 0.25) leakagePts = 10;
+  if (leakageRatio < 0.15) leakagePts = 15;
+  else if (leakageRatio <= 0.25) leakagePts = 8;
 
   // 4) Emergency Buffer (15 pts) — savingsBalance / monthly expenses
+  // Min 2 pts even without buffer: acknowledges strong ongoing cash flow can build it
   const monthsCovered =
     totalExpenses > 0 ? savingsBalance / totalExpenses : 0;
   let bufferPts = 0;
   if (monthsCovered >= 6) bufferPts = 15;
   else if (monthsCovered >= 3) bufferPts = 10;
   else if (monthsCovered >= 1) bufferPts = 5;
+  else if (monthsCovered > 0) bufferPts = 2;
+  else bufferPts = 0;
 
-  // 5) Wealth Building (15 pts) — monthlyInvesting / income
-  const investingRatio = income > 0 ? monthlyInvesting / income : 0;
-  let wealthPts = 0;
-  if (investingRatio >= 0.1) wealthPts = 15;
-  else if (investingRatio >= 0.05) wealthPts = 8;
-  else if (investingRatio >= 0.01) wealthPts = 4;
+  // 5) Debt Burden (10 pts) — Risk from outstanding debt obligations
+  const debtRatio = income > 0 ? debtTotal / income : 0;
+  let debtPts = 0;
+  if (debtRatio === 0) debtPts = 10;
+  else if (debtRatio < 0.1) debtPts = 7;
+  else if (debtRatio < 0.2) debtPts = 4;
 
   const score = Math.max(
     0,
-    Math.min(100, savingsRatePts + housingPts + leakagePts + bufferPts + wealthPts),
+    Math.min(100, savingsRatePts + housingPts + leakagePts + bufferPts + debtPts),
   );
 
   const scoreLabel =
-    score >= 85
+    score >= 88
       ? "Elite"
-      : score >= 70
+      : score >= 75
         ? "Strong"
-        : score >= 55
+        : score >= 60
           ? "Stable but Leaking"
-          : score >= 40
+          : score >= 45
             ? "Risk Zone"
             : "Critical";
 
@@ -585,17 +588,17 @@ function computeTotals(body: any) {
     savingsBalance <= 0
       ? "Add your savings balance to score this — aim for 3+ months of expenses as a starting buffer."
       : `Your savings cover ${monthsCovered.toFixed(1)} months of expenses — target 3+ months to weather surprises, 6+ for full security.`;
-  const explainWealth = () =>
-    monthlyInvesting <= 0
-      ? "Add your monthly investing amount to score this — aim for 5%+ of income to build long-term wealth."
-      : `You're investing ${pct(investingRatio)} of income — push toward 10%+ to compound meaningful wealth.`;
+  const explainDebt = () =>
+    debtTotal <= 0
+      ? "No debt — financial flexibility at full strength."
+      : `Debt obligations are ${pct(debtRatio)} of income — under 10% keeps strategic flexibility.`;
 
   const scoreBreakdown = [
-    { name: "Savings Rate", points: savingsRatePts, max: 30, explanation: explainSavings() },
+    { name: "Savings Rate", points: savingsRatePts, max: 40, explanation: explainSavings() },
     { name: "Housing Cost Ratio", points: housingPts, max: 20, explanation: explainHousing() },
-    { name: "Lifestyle Leakage", points: leakagePts, max: 20, explanation: explainLeakage() },
+    { name: "Lifestyle Leakage", points: leakagePts, max: 15, explanation: explainLeakage() },
     { name: "Emergency Buffer", points: bufferPts, max: 15, explanation: explainBuffer() },
-    { name: "Wealth Building", points: wealthPts, max: 15, explanation: explainWealth() },
+    { name: "Debt Burden", points: debtPts, max: 10, explanation: explainDebt() },
   ];
 
   // Weakest = lowest points-per-max ratio. Tiebreak: largest max wins (bigger lever).
