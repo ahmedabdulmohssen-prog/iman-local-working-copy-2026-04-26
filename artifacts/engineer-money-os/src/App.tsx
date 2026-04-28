@@ -12,6 +12,26 @@ type Priority = {
   monthlyImpact: number | null;
   difficulty: Difficulty;
 };
+type AnalysisConfidence = "High" | "Medium" | "Low";
+type InputCompleteness = {
+  confidence: AnalysisConfidence;
+  enteredCategoryCount: number;
+  keyCategoryCount: number;
+  keyCategoriesExpected: string[];
+  missingKeyCategories: string[];
+  totalLineItems: number;
+  expenseCoverageRatio: number;
+  sparse: boolean;
+  scoreCap: number;
+  scoreAdjusted: boolean;
+  prompt: string;
+};
+
+type PlausibilityCheck = {
+  triggered: boolean;
+  note: string | null;
+  reasons: string[];
+};
 
 type AnalyzeResponse = {
   netCashFlow: number;
@@ -25,6 +45,12 @@ type AnalyzeResponse = {
   financialScore: number;
   scoreLabel?: string;
   scoreInterpretation: string;
+  scoreAdjustedForCompleteness?: boolean;
+  analysisConfidence?: AnalysisConfidence;
+  inputCompleteness?: InputCompleteness;
+  inputCompletenessPrompt?: string;
+  plausibilityCheck?: PlausibilityCheck;
+  plausibilityNote?: string | null;
   scoreBreakdown?: {
     name: string;
     points: number;
@@ -529,12 +555,25 @@ function Results({ data }: { data: AnalyzeResponse }) {
   const weakestCategory = data.weakestCategory;
   const isDeficit = data.isDeficit === true || netCashFlow < 0;
   const insightsLoading = data.insightsLoading === true;
+  const inputCompleteness = data.inputCompleteness;
+  const plausibilityNote =
+    data.plausibilityCheck?.triggered === true
+      ? data.plausibilityNote ?? data.plausibilityCheck.note ?? ""
+      : "";
+  const trustedAdvisorNote = [plausibilityNote, advisorNote]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section className="space-y-5">
       {isDeficit && <DeficitBanner />}
 
-      <ScoreCard score={score} label={interpretation} weakest={weakestCategory} />
+      <ScoreCard
+        score={score}
+        label={interpretation}
+        weakest={weakestCategory}
+        completeness={inputCompleteness}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard
@@ -683,8 +722,8 @@ function Results({ data }: { data: AnalyzeResponse }) {
         </Card>
       )}
 
-      {advisorNote ? (
-        <AdvisorCard note={advisorNote} />
+      {trustedAdvisorNote ? (
+        <AdvisorCard note={trustedAdvisorNote} />
       ) : insightsLoading ? (
         <div className="rounded-2xl border border-blue-500/12 bg-blue-500/5 p-5">
           <InsightSkeleton lines={2} />
@@ -908,10 +947,12 @@ function ScoreCard({
   score,
   label,
   weakest,
+  completeness,
 }: {
   score: number;
   label: string;
   weakest?: { name: string; points: number; max: number; explanation: string };
+  completeness?: InputCompleteness;
 }) {
   const [displayScore, setDisplayScore] = useState(0);
 
@@ -964,6 +1005,9 @@ function ScoreCard({
             {label}
           </span>
         </div>
+        {completeness && (
+          <AnalysisConfidencePanel completeness={completeness} />
+        )}
         <div className="w-full max-w-xl mt-6">
           <div className="h-1.5 bg-zinc-800/80 rounded-full overflow-hidden">
             <div
@@ -993,6 +1037,84 @@ function ScoreCard({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function formatCategoryList(categories: string[]) {
+  if (categories.length === 0) return "";
+  if (categories.length === 1) return categories[0];
+  return `${categories.slice(0, -1).join(", ")} and ${categories[categories.length - 1]}`;
+}
+
+function AnalysisConfidencePanel({
+  completeness,
+}: {
+  completeness: InputCompleteness;
+}) {
+  const missing = completeness.missingKeyCategories.slice(0, 2);
+  const missingText = formatCategoryList(missing);
+  const confidenceTone =
+    completeness.confidence === "Low"
+      ? {
+          label: "text-amber-200",
+          chip: "bg-amber-500/15 text-amber-200 border-amber-500/30",
+          panel: "border-amber-500/20 bg-amber-500/[0.06]",
+        }
+      : completeness.confidence === "Medium"
+        ? {
+            label: "text-blue-200",
+            chip: "bg-blue-500/15 text-blue-200 border-blue-500/24",
+            panel: "border-blue-500/18 bg-blue-500/[0.05]",
+          }
+        : {
+            label: "text-emerald-200",
+            chip: "bg-emerald-500/12 text-emerald-200 border-emerald-500/22",
+            panel: "border-zinc-800/80 bg-zinc-950/45",
+          };
+
+  const guidance =
+    completeness.confidence === "Low" && missingText
+      ? `Add ${missingText} for sharper insights.`
+      : completeness.confidence === "Medium" && missingText
+        ? `Add ${missingText} to tighten this analysis.`
+        : "";
+  const confidenceNote =
+    completeness.confidence === "Low"
+      ? "Score is based on current entries only and may change with more complete data."
+      : "";
+
+  return (
+    <div
+      className={`w-full max-w-xl mt-5 rounded-xl border ${confidenceTone.panel} p-3.5 sm:p-4 text-left`}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="shrink-0">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 mb-1">
+            Analysis Confidence
+          </div>
+          <span
+            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${confidenceTone.chip}`}
+          >
+            {completeness.confidence}
+          </span>
+        </div>
+        <div className="min-w-0 text-sm leading-relaxed">
+          <p className="text-zinc-300">
+            Results improve as more monthly expenses are entered.
+          </p>
+          {guidance && (
+            <p className={`mt-1 font-medium ${confidenceTone.label}`}>
+              {guidance}
+            </p>
+          )}
+          {confidenceNote && (
+            <p className="mt-1 text-zinc-400">
+              {confidenceNote}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -13,6 +13,8 @@
 ## Medium Priority
 - Receipt scan OCR for expenses
 - Better score breakdown UI
+- Replace credit score slider with segmented score range selector
+- Polish After Optimization before/after presentation for clarity
 - Explain recommendation targets
 - Replace accordion arrows with custom chevrons
 - Subscription duplicate detector
@@ -37,4 +39,3 @@
 - TASKLIST.md controls execution
 - Keep MVP simple
 - Ship before expanding
-
