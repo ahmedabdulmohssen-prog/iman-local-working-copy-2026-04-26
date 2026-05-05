@@ -198,6 +198,32 @@ function fmt(n: number): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
+function roundMoneyForRecommendation(n: number): number {
+  return Math.round(n / 5) * 5;
+}
+
+function fmtRecommendation(n: number): string {
+  return fmt(roundMoneyForRecommendation(n));
+}
+
+function impactText(monthlyImpact: number): string {
+  const monthly = roundMoneyForRecommendation(monthlyImpact);
+  return `Impact: ${fmt(monthly)}/mo, ${fmt(monthly * 12)}/yr.`;
+}
+
+function confidenceReduction(
+  baseReduction: number,
+  confidence: AnalysisConfidence,
+): number {
+  if (confidence === "Low") return baseReduction * 0.65;
+  if (confidence === "Medium") return baseReduction * 0.85;
+  return baseReduction;
+}
+
+type RecommendationCandidate = Priority & {
+  priorityScore: number;
+};
+
 export function normalizeName(raw: string): string {
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) return "";
@@ -558,7 +584,10 @@ export function computePlausibilityCheck(opts: {
   };
 }
 
-function buildShortTerm(opts: RecommendationInputs): Priority[] {
+function buildShortTerm(
+  opts: RecommendationInputs,
+  confidence: AnalysisConfidence,
+): Priority[] {
   const {
     income,
     eatingOut,
@@ -575,76 +604,89 @@ function buildShortTerm(opts: RecommendationInputs): Priority[] {
     isDeficit,
   } = opts;
 
-  const moves: Priority[] = [];
+  const moves: RecommendationCandidate[] = [];
+  const reduceLead = confidence === "Low" ? "Try reducing" : "Reduce";
+  const pauseLead = confidence === "Low" ? "Try pausing" : "Pause";
+  const capLead = confidence === "Low" ? "Try a" : "Use a";
+  const runLead = confidence === "Low" ? "Try running" : "Run";
+  const requestLead = confidence === "Low" ? "Try requesting" : "Request";
 
   if (subscriptions.length > 2 && subscriptionsTotal > 0) {
     const sorted = [...subscriptions].sort((a, b) => b.amount - a.amount);
     const top2Total = sorted[0].amount + sorted[1].amount;
     const dropped = subscriptions.length - 2;
-    const save = subscriptionsTotal - top2Total;
+    const save = roundMoneyForRecommendation(subscriptionsTotal - top2Total);
     if (save > 0) {
       moves.push({
-        text: `Cancel ${dropped} subscription${dropped === 1 ? "" : "s"} - keep your top 2 (${fmt(top2Total)}/mo).`,
+        text: `${pauseLead} ${dropped} lower-use subscription${dropped === 1 ? "" : "s"} and keep only the recurring services used weekly. Why it matters: subscriptions turn forgotten choices into automatic monthly withdrawals, so usage has to earn the renewal. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Easy",
+        priorityScore: save + 75,
       });
     }
   }
 
   if (eatingOut > 0) {
-    const reductionPct = isDeficit ? 0.5 : 0.4;
-    const newEatingOut = Math.round(eatingOut * (1 - reductionPct));
-    const groceriesBump = eatingOut > groceries ? 50 : 0;
-    const save = eatingOut - newEatingOut - groceriesBump;
+    const reductionPct = confidenceReduction(isDeficit ? 0.5 : 0.4, confidence);
+    const save = roundMoneyForRecommendation(eatingOut * reductionPct);
     if (save > 0) {
-      const text =
-        groceriesBump > 0
-          ? `Cut takeout to ${fmt(newEatingOut)}/mo and add ${fmt(groceriesBump)} to groceries.`
-          : `Reduce takeout from ${fmt(eatingOut)} to ${fmt(newEatingOut)}/mo.`;
+      const why =
+        eatingOut > groceries
+          ? `Why it matters: takeout is ${fmtRecommendation(eatingOut)}/mo versus ${fmtRecommendation(groceries)}/mo in groceries, so convenience is outrunning the actual meal plan.`
+          : "Why it matters: this is flexible food spend, so fewer takeout runs protects lifestyle better than cutting fixed bills.";
+      const text = `${reduceLead} takeout by ${fmtRecommendation(save)}/mo by cutting one or two runs each week. ${why} ${impactText(save)}`;
       moves.push({
         text,
         monthlyImpact: save,
         difficulty: eatingOut > 400 ? "Medium" : "Easy",
+        priorityScore: save + (eatingOut > groceries ? 250 : 0),
       });
     }
   }
 
   if (servicesTotal > 0) {
-    const reductionPct = isDeficit ? 0.5 : 0.3;
-    const newServices = Math.round(servicesTotal * (1 - reductionPct));
-    const save = servicesTotal - newServices;
+    const reductionPct = confidenceReduction(isDeficit ? 0.5 : 0.3, confidence);
+    const newServices = roundMoneyForRecommendation(
+      servicesTotal * (1 - reductionPct),
+    );
+    const save = roundMoneyForRecommendation(servicesTotal - newServices);
     if (save > 0) {
       moves.push({
-        text: `Cut paid service frequency from ${fmt(servicesTotal)} to ${fmt(newServices)}/mo.`,
+        text: `${reduceLead} paid-service frequency by ${fmtRecommendation(save)}/mo by spacing appointments out or rotating the lowest-value service off for a month. Why it matters: the useful help stays, but convenience stops behaving like a fixed bill. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Easy",
+        priorityScore: save + 100,
       });
     }
   }
 
   if (otherTotal > 50) {
-    const reductionPct = isDeficit ? 0.4 : 0.3;
-    const newOther = Math.round(otherTotal * (1 - reductionPct));
-    const save = otherTotal - newOther;
+    const reductionPct = confidenceReduction(isDeficit ? 0.4 : 0.3, confidence);
+    const newOther = roundMoneyForRecommendation(otherTotal * (1 - reductionPct));
+    const save = roundMoneyForRecommendation(otherTotal - newOther);
     if (save > 0) {
       moves.push({
-        text: `Pause nonessentials - cap miscellaneous at ${fmt(newOther)}/mo.`,
+        text: `${capLead} miscellaneous cap near ${fmtRecommendation(newOther)}/mo and hold back ${fmtRecommendation(save)}/mo. Why it matters: small unplanned purchases accumulate because each one feels harmless alone; batching them into one weekly decision stops the slow pile-up. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Easy",
+        priorityScore: save + 125,
       });
     }
   }
 
   const personalThreshold = Math.max(0.08 * income, 300);
   if (personalTotal > personalThreshold) {
-    const reductionPct = isDeficit ? 0.25 : 0.2;
-    const newPersonal = Math.round(personalTotal * (1 - reductionPct));
-    const save = personalTotal - newPersonal;
+    const reductionPct = confidenceReduction(isDeficit ? 0.25 : 0.2, confidence);
+    const newPersonal = roundMoneyForRecommendation(
+      personalTotal * (1 - reductionPct),
+    );
+    const save = roundMoneyForRecommendation(personalTotal - newPersonal);
     if (save > 0) {
       moves.push({
-        text: `Trim personal spending from ${fmt(personalTotal)} to ${fmt(newPersonal)}/mo.`,
+        text: `${capLead} personal-spending cap near ${fmtRecommendation(newPersonal)}/mo, then space nonessential buys by 48 hours to save ${fmtRecommendation(save)}/mo. Why it matters: the pause keeps the purchases you actually want and blocks small upgrades from absorbing the surplus. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Easy",
+        priorityScore: save + 50,
       });
     }
   }
@@ -654,49 +696,211 @@ function buildShortTerm(opts: RecommendationInputs): Priority[] {
   );
   const insuranceTotal = insuranceLines.reduce((s, it) => s + it.amount, 0);
   if (insuranceTotal >= 80) {
-    const save = Math.round(insuranceTotal * 0.12);
+    const save = roundMoneyForRecommendation(insuranceTotal * 0.12);
     if (save >= 5) {
       moves.push({
-        text: `Re-shop insurance quotes (${fmt(insuranceTotal)}/mo) - switching providers commonly saves about 10-15%.`,
+        text: `${runLead} a quote check on the current ${fmtRecommendation(insuranceTotal)}/mo insurance spend and look for about ${fmtRecommendation(save)}/mo in premium relief. Why it matters: this is a paperwork lever, not a lifestyle cut. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Medium",
+        priorityScore: save + 25,
       });
     }
   }
 
   const utilThreshold = Math.max(0.05 * income, 200);
   if (utilitiesTotal > utilThreshold) {
-    const save = Math.round(utilitiesTotal * 0.1);
+    const save = roundMoneyForRecommendation(utilitiesTotal * 0.1);
     if (save >= 5) {
       moves.push({
-        text: `Audit utility plans (${fmt(utilitiesTotal)}/mo) - switching providers often shaves about 10%.`,
+        text: `${runLead} a utility-plan audit on the current ${fmtRecommendation(utilitiesTotal)}/mo total and look for about ${fmtRecommendation(save)}/mo in lower rates. Why it matters: old plans often stay expensive after usage changes; a re-shop keeps the service and trims the drag. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Easy",
+        priorityScore: save,
       });
     }
   }
 
   if (debtTotal > 0) {
-    moves.push({
-      text: `Call card and loan issuers (${fmt(debtTotal)}/mo) to request a lower APR or hardship plan.`,
-      monthlyImpact: null,
-      difficulty: "Medium",
-    });
-  }
-
-  if (isDeficit) {
-    moves.push({
-      text: "Add a short-term side income stream (freelance, gig, contract) to bridge the deficit faster.",
-      monthlyImpact: null,
-      difficulty: "Hard",
-    });
+    const save = roundMoneyForRecommendation(debtTotal * 0.08);
+    if (save >= 25) {
+      moves.push({
+        text: `${requestLead} a lower-rate debt review on ${fmtRecommendation(debtTotal)}/mo of payments and look for about ${fmtRecommendation(save)}/mo of payment relief. Why it matters: less payment pressure improves monthly oxygen while you keep paying the balance down. ${impactText(save)}`,
+        monthlyImpact: save,
+        difficulty: "Medium",
+        priorityScore: save + 25,
+      });
+    }
   }
 
   const withImpact = moves
     .filter((m) => typeof m.monthlyImpact === "number")
-    .sort((a, b) => (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0));
-  const noImpact = moves.filter((m) => m.monthlyImpact === null);
-  return [...withImpact, ...noImpact].slice(0, 3);
+    .sort((a, b) => {
+      if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
+      return (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0);
+    });
+  return withImpact.slice(0, 3).map(({ text, monthlyImpact, difficulty }) => ({
+    text,
+    monthlyImpact,
+    difficulty,
+  }));
+}
+
+function hasEfficientUserPattern(
+  opts: RecommendationInputs,
+  confidence: AnalysisConfidence,
+): boolean {
+  const {
+    income,
+    netCashFlow,
+    housingTotal,
+    utilitiesTotal,
+    foodTotal,
+    transportationTotal,
+    servicesTotal,
+    otherTotal,
+    personalTotal,
+    eatingOut,
+    groceries,
+    ratios,
+  } = opts;
+
+  if (income <= 0 || confidence === "Low") return false;
+
+  const hasBalancedBasics =
+    housingTotal > 0 &&
+    utilitiesTotal > 0 &&
+    foodTotal > 0 &&
+    transportationTotal > 0;
+  const strongSurplus = netCashFlow >= 500 && ratios.savingsRate >= 0.25;
+  const balancedFixedCosts =
+    ratios.housingRatio <= 0.32 &&
+    ratios.debtRatio <= 0.1 &&
+    ratios.subscriptionRatio <= 0.03;
+  const lowFlexibleLeakage =
+    ratios.leakageRatio <= 0.18 &&
+    servicesTotal <= income * 0.04 &&
+    otherTotal <= Math.max(250, income * 0.04) &&
+    personalTotal <= Math.max(500, income * 0.1);
+  const balancedFood =
+    eatingOut <= Math.max(groceries, income * 0.05) && foodTotal <= income * 0.14;
+
+  return (
+    hasBalancedBasics &&
+    strongSurplus &&
+    balancedFixedCosts &&
+    lowFlexibleLeakage &&
+    balancedFood
+  );
+}
+
+function optionalEfficientOptimization(
+  opts: RecommendationInputs,
+  confidence: AnalysisConfidence,
+): Priority | null {
+  const {
+    income,
+    eatingOut,
+    groceries,
+    subscriptions,
+    subscriptionsTotal,
+    otherTotal,
+    servicesTotal,
+  } = opts;
+
+  const softLead = confidence === "Medium" ? "If you want one light tune-up" : "Optional tune-up";
+  const minorLimit = Math.max(75, income * 0.015);
+  const candidates: RecommendationCandidate[] = [];
+
+  if (subscriptions.length > 2 && subscriptionsTotal > 0) {
+    const sorted = [...subscriptions].sort((a, b) => b.amount - a.amount);
+    const top2Total = sorted[0].amount + sorted[1].amount;
+    const dropped = subscriptions.length - 2;
+    const save = roundMoneyForRecommendation(subscriptionsTotal - top2Total);
+    if (save >= 25 && save <= minorLimit) {
+      candidates.push({
+        text: `${softLead}: pause ${dropped} lower-use subscription${dropped === 1 ? "" : "s"} and keep only what gets weekly use. Why it matters: this is small maintenance, not a lifestyle correction. ${impactText(save)}`,
+        monthlyImpact: save,
+        difficulty: "Easy",
+        priorityScore: save + 40,
+      });
+    }
+  }
+
+  if (eatingOut > 0) {
+    const save = roundMoneyForRecommendation(eatingOut * 0.15);
+    if (save >= 25 && save <= minorLimit) {
+      const behavior =
+        eatingOut > groceries
+          ? `takeout is ${fmtRecommendation(eatingOut)}/mo versus ${fmtRecommendation(groceries)}/mo in groceries`
+          : `takeout is ${fmtRecommendation(eatingOut)}/mo and still flexible`;
+      candidates.push({
+        text: `${softLead}: reduce takeout frequency slightly, about ${fmtRecommendation(save)}/mo. Why it matters: ${behavior}, so a small frequency change is enough; this is not a major cut. ${impactText(save)}`,
+        monthlyImpact: save,
+        difficulty: "Easy",
+        priorityScore: save + (eatingOut > groceries ? 30 : 10),
+      });
+    }
+  }
+
+  if (otherTotal > Math.max(150, income * 0.02)) {
+    const save = roundMoneyForRecommendation(otherTotal * 0.15);
+    if (save >= 25 && save <= minorLimit) {
+      candidates.push({
+        text: `${softLead}: set a weekly misc cap and hold back about ${fmtRecommendation(save)}/mo. Why it matters: small unplanned buys stack quietly, so one cap keeps them visible without making the budget feel tight. ${impactText(save)}`,
+        monthlyImpact: save,
+        difficulty: "Easy",
+        priorityScore: save + 20,
+      });
+    }
+  }
+
+  if (servicesTotal > Math.max(150, income * 0.02)) {
+    const save = roundMoneyForRecommendation(servicesTotal * 0.15);
+    if (save >= 25 && save <= minorLimit) {
+      candidates.push({
+        text: `${softLead}: space out one paid service and save about ${fmtRecommendation(save)}/mo. Why it matters: the service can stay, but a slightly slower cadence keeps convenience from becoming automatic. ${impactText(save)}`,
+        monthlyImpact: save,
+        difficulty: "Easy",
+        priorityScore: save,
+      });
+    }
+  }
+
+  const best = candidates.sort((a, b) => b.priorityScore - a.priorityScore)[0];
+  if (!best) return null;
+  return {
+    text: best.text,
+    monthlyImpact: best.monthlyImpact,
+    difficulty: best.difficulty,
+  };
+}
+
+function buildEfficientUserOpportunities(
+  opts: RecommendationInputs,
+  confidence: AnalysisConfidence,
+): SavingsOpportunities {
+  const surplus = roundMoneyForRecommendation(opts.netCashFlow);
+  const guidance: Priority = {
+    text: `You're in a strong position: spending is balanced and current surplus is ${fmt(surplus)}/mo, or ${fmt(surplus * 12)}/yr. Direct that cash flow toward savings or investments first. Why it matters: with low leakage, compounding surplus will do more than chasing a handful of small cuts.`,
+    monthlyImpact: null,
+    difficulty: "Easy",
+  };
+  const optional = optionalEfficientOptimization(opts, confidence);
+  const shortTermPriorities = optional ? [guidance, optional] : [guidance];
+  const monthlySavings =
+    typeof optional?.monthlyImpact === "number" ? optional.monthlyImpact : 0;
+
+  return {
+    shortTermPriorities,
+    longTermOpportunities: [],
+    recommendedActions: shortTermPriorities.map((m) => ({
+      text: m.text,
+      savings: m.monthlyImpact,
+    })),
+    monthlySavings,
+    annualWaste: monthlySavings * 12,
+    projectedNetCashFlow: opts.netCashFlow + monthlySavings,
+  };
 }
 
 function buildLongTerm(opts: RecommendationInputs): Priority[] {
@@ -719,21 +923,21 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
   const leakageTotal = foodTotal + subscriptionsTotal + otherTotal;
 
   if (income > 0 && (savingsRate < 0.1 || isDeficit)) {
-    const target = Math.round(income * 0.1);
+    const target = roundMoneyForRecommendation(income * 0.1);
     moves.push({
-      text: `Pursue a raise, promotion, or higher-paying role - even a 10% bump (${fmt(target)}/mo) reshapes your runway.`,
+      text: `Pursue a raise, promotion, or higher-paying role that adds roughly ${fmtRecommendation(target)}/mo. Why it matters: when retention is thin, income growth widens the margin without forcing extreme lifestyle cuts. ${impactText(target)}`,
       monthlyImpact: target,
       difficulty: "Hard",
     });
   }
 
   if (debt.length >= 2 || (income > 0 && debtTotal > 0.1 * income)) {
-    const save = Math.max(40, Math.round(debtTotal * 0.15));
+    const save = roundMoneyForRecommendation(Math.max(40, debtTotal * 0.15));
     moves.push({
       text:
         debt.length >= 2
-          ? `Consolidate ${debt.length} debt balances into one lower-rate loan to free monthly cash.`
-          : `Refinance ${fmt(debtTotal)}/mo of debt into a lower-rate loan to ease monthly pressure.`,
+          ? `Compare consolidation options for ${debt.length} debt balances and look for about ${fmtRecommendation(save)}/mo of payment relief. Why it matters: scattered payments reduce flexibility; one lower-rate structure can return cash flow without pretending the debt disappeared. ${impactText(save)}`
+          : `Compare refinance options on ${fmtRecommendation(debtTotal)}/mo of debt payments and look for about ${fmtRecommendation(save)}/mo of relief. Why it matters: less payment pressure improves monthly oxygen while you keep paying the balance down. ${impactText(save)}`,
       monthlyImpact: save,
       difficulty: "Medium",
     });
@@ -741,20 +945,20 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
 
   const leakageRatio = income > 0 ? leakageTotal / income : 0;
   if (leakageRatio > 0.25 && leakageTotal > 0) {
-    const save = Math.round(leakageTotal * 0.2);
+    const save = roundMoneyForRecommendation(leakageTotal * 0.2);
     moves.push({
-      text: `Downsize discretionary lifestyle (food, subs, misc total ${fmt(leakageTotal)}/mo) over the next 6 months.`,
+      text: `Simplify food, subscriptions, and misc by about ${fmtRecommendation(save)}/mo over 6 months. Why it matters: the combined bundle is ${fmtRecommendation(leakageTotal)}/mo, so small leaks across several categories are acting like one large bill. ${impactText(save)}`,
       monthlyImpact: save,
       difficulty: "Medium",
     });
   }
 
   if (income > 0 && housingTotal / income > 0.35) {
-    const newHousing = Math.round(income * 0.3);
-    const save = housingTotal - newHousing;
+    const newHousing = roundMoneyForRecommendation(income * 0.3);
+    const save = roundMoneyForRecommendation(housingTotal - newHousing);
     if (save > 0) {
       moves.push({
-        text: `Plan a move to housing under ${fmt(newHousing)}/mo (about 30% of income) at next lease end.`,
+        text: `At lease renewal, compare housing options in the ${fmtRecommendation(newHousing)}/mo range and look for about ${fmtRecommendation(save)}/mo of relief. Why it matters: housing is a fixed-cost anchor, so improving it changes every future month. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Hard",
       });
@@ -766,24 +970,15 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
     transportationTotal / income > 0.15 &&
     transportationTotal > 500
   ) {
-    const newTransport = Math.round(transportationTotal * 0.6);
-    const save = transportationTotal - newTransport;
+    const newTransport = roundMoneyForRecommendation(transportationTotal * 0.6);
+    const save = roundMoneyForRecommendation(transportationTotal - newTransport);
     if (save > 0) {
       moves.push({
-        text: `Replace your vehicle with a cheaper-to-own option (target about ${fmt(newTransport)}/mo all-in).`,
+        text: `At the next vehicle decision, choose a payment, insurance, and fuel setup around ${fmtRecommendation(newTransport)}/mo and free about ${fmtRecommendation(save)}/mo. Why it matters: vehicle costs behave like fixed costs, and lowering them frees cash without touching daily essentials. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Hard",
       });
     }
-  }
-
-  if (severeDeficit && income > 0) {
-    const save = Math.round(income * 0.05);
-    moves.push({
-      text: "Consider relocating to a lower cost-of-living area to reset fixed costs.",
-      monthlyImpact: save > 0 ? save : null,
-      difficulty: "Hard",
-    });
   }
 
   const isHeavy = (m: Priority) =>
@@ -796,9 +991,9 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
     .sort((a, b) => (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0));
 
   if (!severeDeficit && heavy.length > 0 && rest.length === 0 && income > 0) {
-    const target = Math.round(income * 0.1);
+    const target = roundMoneyForRecommendation(income * 0.1);
     rest.push({
-      text: `Pursue a raise, promotion, or higher-paying role - even a 10% bump (${fmt(target)}/mo) reshapes your runway.`,
+      text: `Pursue a raise, promotion, or higher-paying role that adds roughly ${fmtRecommendation(target)}/mo. Why it matters: more income can widen the margin without forcing an extreme fixed-cost move. ${impactText(target)}`,
       monthlyImpact: target,
       difficulty: "Hard",
     });
@@ -810,8 +1005,13 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
 
 export function computeSavingsOpportunities(
   inputs: RecommendationInputs,
+  confidence: AnalysisConfidence,
 ): SavingsOpportunities {
-  const shortTermPriorities = buildShortTerm(inputs);
+  if (hasEfficientUserPattern(inputs, confidence)) {
+    return buildEfficientUserOpportunities(inputs, confidence);
+  }
+
+  const shortTermPriorities = buildShortTerm(inputs, confidence);
   const longTermOpportunities = buildLongTerm(inputs);
   const monthlySavings = shortTermPriorities.reduce(
     (s, m) => s + (typeof m.monthlyImpact === "number" ? m.monthlyImpact : 0),
@@ -1090,7 +1290,10 @@ export function computeTotals(body: unknown): AnalysisTotals {
     categoryTotals,
     totalExpenses,
   });
-  const savings = computeSavingsOpportunities(recommendationInputs);
+  const savings = computeSavingsOpportunities(
+    recommendationInputs,
+    inputCompletenessBase.confidence,
+  );
   const projections = computeInvestmentProjections({
     monthlySavings: savings.monthlySavings,
     investPct: raw["investPct"],
@@ -1134,26 +1337,11 @@ export function computeTotals(body: unknown): AnalysisTotals {
 }
 
 export function fallbackOpportunities(t: AnalysisTotals): string[] {
-  const out: string[] = [];
-  if (t.eatingOut > t.groceries && t.eatingOut > 0) {
-    out.push(
-      "Eating out significantly exceeds groceries; shifting this will close most of the gap.",
-    );
-  }
-  if (t.subscriptions.length > 2) {
-    out.push("Multiple overlapping subscriptions increase recurring cost.");
-  }
-  if (t.servicesTotal > 0.1 * t.income && t.income > 0) {
-    out.push(
-      "Service spending is a large share of income; reducing frequency will free cash.",
-    );
-  }
-  if (out.length === 0) {
-    out.push(
-      "Spending is broadly balanced; small consolidation in subscriptions still helps.",
-    );
-  }
-  return out;
+  return t.shortTermPriorities
+    .filter((move) => typeof move.monthlyImpact === "number")
+    .sort((a, b) => (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0))
+    .slice(0, 3)
+    .map((move) => move.text);
 }
 
 export function fallbackAdvisor(t: AnalysisTotals): string {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import imanWordmark from "./Assets/iman-wordmark.png";
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3001";
 
 type Item = { name: string; amount: string };
 

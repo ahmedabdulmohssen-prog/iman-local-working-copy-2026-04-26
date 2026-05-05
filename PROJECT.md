@@ -47,6 +47,8 @@ CORE SYSTEM MODULES
 5. Monthly Tracker
 6. Investment Projection Engine
 7. Cost of Living Context Engine
+8. Analysis Confidence System
+9. Plausibility Check Layer
 
 ========================
 INPUT SYSTEM
@@ -118,6 +120,8 @@ Backend handles:
 - Totals
 - Ratios
 - Scores
+- Analysis confidence
+- Plausibility checks
 - Savings values
 - Projections
 
@@ -161,17 +165,24 @@ Score Range:
 
 Purpose:
 
-Measure financial efficiency, not punishment for necessary living costs.
+Measure financial efficiency from entered data only, not punishment for necessary living costs.
 
 Score Inputs:
 
-1. Cash Flow Health
-2. Savings Rate
-3. Waste Ratio
-4. Debt Burden
-5. Subscription Bloat
-6. Emergency Cushion (future)
-7. Housing burden adjusted by ZIP code
+1. Cash Retention
+2. Controllable Waste
+3. Debt Burden
+4. Subscription Bloat
+5. Deficit Risk
+6. Housing Pressure
+
+Rules:
+
+- Uses only the income and expenses the user entered
+- Does not estimate missing expenses
+- Does not adjust for input completeness
+- Does not use plausibility warnings to change score
+- Analysis Confidence is shown separately
 
 High Score Means:
 
@@ -186,6 +197,51 @@ Low Score Means:
 - Weak retention
 - Debt pressure
 - Poor allocation
+
+========================
+ANALYSIS CONFIDENCE SYSTEM
+========================
+
+Purpose:
+
+Show how complete the entered expense profile appears.
+
+Confidence Levels:
+
+- High
+- Medium
+- Low
+
+Rules:
+
+- Based on input completeness only
+- Looks at entered categories, key categories, line item count, and expense coverage
+- Does not change Financial Score
+- Does not judge whether the lifestyle is realistic
+- Gives the user a prompt to add missing categories or line items when needed
+
+========================
+PLAUSIBILITY CHECK LAYER
+========================
+
+Purpose:
+
+Detect unrealistic or incomplete lifestyle data that may make a strong score misleading.
+
+Examples:
+
+- Very low housing for substantial income
+- Missing adult basics like food, utilities, transportation, or debt
+- Very sparse expense entries
+- Very high retained cash with incomplete data
+
+Rules:
+
+- Does not affect Financial Score
+- Does not affect Analysis Confidence
+- Does not invent missing expenses
+- Adds advisory messaging only
+- Appears through the Trusted Advisor summary when triggered
 
 ========================
 WASTE DETECTION LOGIC
@@ -273,15 +329,17 @@ OUTPUT STRUCTURE
 ========================
 
 1. Financial Score
-2. Net Cash Flow
-3. Weekly Safe Spend
-4. Waste Detected
-5. Potential Savings
-6. Recommended Actions
-7. Before vs After Optimization
-8. Investment Growth Projection
-9. Monthly Tracker Summary
-10. Trusted Advisor Summary
+2. Analysis Confidence
+3. Plausibility Advisory, when triggered
+4. Net Cash Flow
+5. Weekly Safe Spend
+6. Waste Detected
+7. Potential Savings
+8. Recommended Actions
+9. Before vs After Optimization
+10. Investment Growth Projection
+11. Monthly Tracker Summary
+12. Trusted Advisor Summary
 
 ========================
 CURRENT BUILD PRIORITIES
@@ -313,6 +371,9 @@ NON NEGOTIABLE RULES
 - Backend numbers are truth
 - AI cannot invent math
 - Same input = same output
+- Financial Score uses entered data only
+- Analysis Confidence is based on input completeness only
+- Plausibility checks add advisory messaging only
 - Monthly × 12 must always match yearly
 - Product must feel useful in first session
 - No feature bloat before trust is built

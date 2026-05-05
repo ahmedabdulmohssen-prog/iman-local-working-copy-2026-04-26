@@ -12,7 +12,7 @@ IMAN Money is a financial decision engine focused on helping users identify cont
 - Users who want direct actions, not fluff
 
 ## Core Value Proposition
-Input income and expenses. Track monthly expenses on a day by day basis. Receive a clear score, leak detection, savings opportunities, and future wealth projections.
+Input income and expenses. Track monthly expenses on a day by day basis. Receive a clear score, analysis confidence, leak detection, plausibility guidance, savings opportunities, and future wealth projections.
 
 ## Current Working Build
 - Local recovered copy runs in VS Code
@@ -20,9 +20,11 @@ Input income and expenses. Track monthly expenses on a day by day basis. Receive
 - Analysis flow works
 - UI dark theme active
 - Investment slider exists
+- Financial Score is calculated from entered income and expense data only
+- Analysis Confidence is based on input completeness only
+- Plausibility Check adds advisory messaging for unrealistic or incomplete lifestyle data without changing score or confidence
 
 ## Current Problems
-- Score logic needs redesign toward waste, not raw spend
 - Recommendations need realism
 - Need monthly tracker system
 - Need ZIP code cost context
@@ -30,10 +32,11 @@ Input income and expenses. Track monthly expenses on a day by day basis. Receive
 ## Product Philosophy
 - Backend math is source of truth
 - AI explains, summarizes, recommends
+- Financial Score, Analysis Confidence, and Plausibility Check are separate systems
+- Plausibility guidance never changes the score
 - Simplicity beats complexity
 - Fast onboarding matters
 - User must feel immediate value
 
 ## Current Stopping Point
-Need redesign of scoring model based on wasteful spending instead of punishing normal living expenses.
-
+Need stronger recommendation realism, ZIP code cost context, monthly tracker MVP, live investment updates, and clearer score explanation.

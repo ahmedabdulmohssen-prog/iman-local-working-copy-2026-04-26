@@ -20,6 +20,14 @@
 - Subscription duplicate detector
 - Spending trend charts
 - Auto focus input UX improvements
+- Auto-focus input on sub-category selection
+  - When a user clicks a sub-category to add it, automatically focus the cursor on the amount input field
+  - Ready for immediate typing with no extra clicks required
+  - Must work on desktop and mobile
+  - Must not break existing form behavior
+  - Use a smooth transition with no scrolling jump issues
+  - Only triggers on new sub-category addition
+  - Do not refactor the entire form
 
 ## Future Features
 - Couple / family mode

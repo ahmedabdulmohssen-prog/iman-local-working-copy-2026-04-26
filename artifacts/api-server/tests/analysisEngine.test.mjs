@@ -53,6 +53,22 @@ function scorePart(result, name) {
   return part;
 }
 
+function assertImpactText(move) {
+  assert.equal(typeof move.monthlyImpact, "number");
+  assert.ok(move.monthlyImpact > 0);
+  assert.equal("priorityScore" in move, false);
+  assert.equal(move.monthlyImpact % 5, 0);
+  assert.match(move.text, /Why it matters:/);
+  assert.match(move.text, /\$\d[\d,]*\/mo/);
+  assert.match(move.text, /\$\d[\d,]*\/yr/);
+  const impact = move.text.match(/Impact: \$(\d[\d,]*)\/mo, \$(\d[\d,]*)\/yr\./);
+  assert.ok(impact, `Missing impact text: ${move.text}`);
+  const monthly = Number(impact[1].replace(/,/g, ""));
+  const yearly = Number(impact[2].replace(/,/g, ""));
+  assert.equal(monthly, move.monthlyImpact);
+  assert.equal(yearly, monthly * 12);
+}
+
 const tests = [];
 function test(name, fn) {
   tests.push({ name, fn });
@@ -76,6 +92,41 @@ test("healthy surplus scores strong and preserves yearly math", () => {
   assert.equal(result.analysisConfidence, "High");
   assert.equal(result.annualWaste, result.monthlySavings * 12);
   assert.ok(result.scoreBreakdown.every((entry) => entry.points <= entry.max));
+});
+
+test("efficient users get validation and cash flow guidance instead of small cuts", () => {
+  const result = computeTotals(
+    payload(10000, {
+      Housing: [item("Rent", 2500)],
+      Utilities: [item("Electricity", 160), item("Internet", 90)],
+      Food: [item("Groceries", 700), item("Eating Out", 250)],
+      Transportation: [item("Fuel", 300)],
+      Subscriptions: [item("Music", 15), item("Cloud", 15)],
+      Personal: [item("Clothing", 200)],
+    }),
+  );
+
+  assert.equal(result.analysisConfidence, "High");
+  assert.ok(result.ratios.savingsRate >= 0.25);
+  assert.ok(result.shortTermPriorities.length <= 2);
+  assert.equal(result.longTermOpportunities.length, 0);
+
+  const guidance = result.shortTermPriorities[0];
+  assert.equal(guidance.monthlyImpact, null);
+  assert.match(guidance.text, /You're in a strong position/);
+  assert.match(guidance.text, /spending is balanced/);
+  assert.match(guidance.text, /surplus is \$5,770\/mo, or \$69,240\/yr/);
+  assert.match(guidance.text, /savings or investments/);
+  assert.match(guidance.text, /more than chasing .* small cuts/);
+
+  const optionalCuts = result.shortTermPriorities.filter(
+    (move) => typeof move.monthlyImpact === "number",
+  );
+  assert.ok(optionalCuts.length <= 1);
+  assert.equal(result.monthlySavings, 40);
+  assert.equal(result.annualWaste, 480);
+  assertImpactText(optionalCuts[0]);
+  assert.match(optionalCuts[0].text, /Optional tune-up/);
 });
 
 test("paycheck to paycheck high income leakage produces low trust score and targeted actions", () => {
@@ -149,8 +200,101 @@ test("subscription bloat triggers cancellation recommendation", () => {
   );
 
   assert.ok(result.wasteSignals.some((signal) => signal.key === "subscription_bloat"));
-  assert.ok(result.shortTermPriorities.some((move) => /Cancel \d+ subscription/.test(move.text)));
+  assert.ok(
+    result.shortTermPriorities.some((move) =>
+      /\d+ lower-use subscriptions?/.test(move.text),
+    ),
+  );
   assert.ok(scorePart(result, "Subscription Bloat").points < 10);
+});
+
+test("recommendations are impact-ranked and include monthly and yearly numbers", () => {
+  const result = computeTotals(
+    payload(12000, {
+      Housing: [item("Rent", 3000)],
+      Utilities: [item("Electricity", 300), item("Phone", 180), item("Internet", 120)],
+      Food: [item("Groceries", 800), item("Eating Out", 2400)],
+      Transportation: [item("Fuel", 250)],
+      Services: [item("Cleaning", 700), item("Laundry", 500)],
+      Subscriptions: [
+        item("Video", 90),
+        item("Music", 60),
+        item("Fitness", 80),
+        item("Cloud", 70),
+        item("News", 50),
+        item("Apps", 150),
+      ],
+      Debt: [item("Loan", 600)],
+      Personal: [item("Clothing", 500), item("Grooming", 400)],
+      Misc: [item("Amazon extras", 900)],
+    }),
+  );
+
+  assert.ok(result.shortTermPriorities.length >= 2);
+  assert.ok(result.shortTermPriorities.length <= 3);
+  result.shortTermPriorities.forEach(assertImpactText);
+  result.longTermOpportunities.forEach(assertImpactText);
+
+  const impacts = result.shortTermPriorities.map((move) => move.monthlyImpact);
+  assert.deepEqual(
+    impacts,
+    [...impacts].sort((a, b) => b - a),
+  );
+});
+
+test("low confidence recommendations use softer targets without changing score or confidence", () => {
+  const low = computeTotals(
+    payload(10000, {
+      Food: [item("Eating Out", 2000)],
+    }),
+  );
+  const high = computeTotals(
+    payload(10000, {
+      Housing: [item("Rent", 2200)],
+      Utilities: [item("Electricity", 160), item("Internet", 90)],
+      Food: [item("Groceries", 700), item("Eating Out", 2000)],
+      Transportation: [item("Fuel", 300)],
+      Subscriptions: [item("Music", 15), item("Cloud", 15)],
+    }),
+  );
+
+  assert.equal(low.analysisConfidence, "Low");
+  assert.equal(high.analysisConfidence, "High");
+  assert.ok(low.shortTermPriorities[0].text.startsWith("Try reducing "));
+  assert.ok(high.shortTermPriorities[0].text.startsWith("Reduce "));
+  assert.equal(low.scoreAdjustedForCompleteness, false);
+  assert.equal(high.scoreAdjustedForCompleteness, false);
+  assert.equal(low.plausibilityCheck.triggered, false);
+});
+
+test("recommendation display rounds to nearest five and annualizes rounded monthly impact", () => {
+  const result = computeTotals(
+    payload(5000, {
+      Housing: [item("Rent", 1500)],
+      Utilities: [item("Utilities", 200)],
+      Food: [item("Groceries", 100), item("Eating Out", 333)],
+      Transportation: [item("Fuel", 200)],
+      Subscriptions: [item("Streaming", 50)],
+      Personal: [item("Personal", 100)],
+    }),
+  );
+
+  const foodMove = result.shortTermPriorities.find((move) =>
+    /takeout/i.test(move.text),
+  );
+  assert.ok(foodMove);
+  assertImpactText(foodMove);
+  assert.equal(foodMove.monthlyImpact, 135);
+  assert.match(foodMove.text, /Reduce takeout by \$135\/mo/);
+  assert.match(foodMove.text, /cutting one or two runs each week/);
+  assert.match(foodMove.text, /takeout is \$335\/mo versus \$100\/mo/);
+  assert.doesNotMatch(foodMove.text, /move .* groceries/i);
+  assert.doesNotMatch(foodMove.text, /Set takeout/i);
+  assert.doesNotMatch(foodMove.text, /bring .*closer/i);
+  assert.doesNotMatch(foodMove.text, /closer to .*range/i);
+  assert.match(foodMove.text, /Impact: \$135\/mo, \$1,620\/yr\./);
+  assert.equal(result.monthlySavings, 135);
+  assert.equal(result.annualWaste, 1620);
 });
 
 test("debt pressure is scored separately and creates long-term debt action", () => {
@@ -168,7 +312,7 @@ test("debt pressure is scored separately and creates long-term debt action", () 
   assert.ok(scorePart(result, "Debt Burden").points <= 3);
   assert.ok(
     result.longTermOpportunities.some((move) =>
-      /Consolidate|Refinance/.test(move.text),
+      /consolidation|refinance/i.test(move.text),
     ),
   );
 });

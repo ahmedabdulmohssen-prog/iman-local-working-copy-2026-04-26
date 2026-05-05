@@ -61,8 +61,9 @@ router.post("/insights", async (req, res) => {
       ? "supportive, optimizing"
       : "advisory, improvement-focused";
 
-  const shortForContext = t.shortTermPriorities
-    .map((m, i) => `${i + 1}. ${m.text}`)
+  const optimizationOpportunities = fallbackOpportunities(t);
+  const shortForContext = optimizationOpportunities
+    .map((text, i) => `${i + 1}. ${text}`)
     .join("\n");
   const longForContext = t.longTermOpportunities
     .map((m, i) => `${i + 1}. ${m.text}`)
@@ -78,15 +79,11 @@ Long term opportunities (3-12 months, already chosen by the system):
 ${longForContext || "(none)"}
 
 YOUR JOB:
-Write short qualitative text only. Do NOT propose numbers, dollar amounts, percentages, reductions, or new actions. Describe patterns in plain English.
+Write the advisor note only. Do NOT propose numbers, dollar amounts, percentages, reductions, or new actions. The system already chose the recommendations above.
 
 Tone: ${tone}.
 
 Output EXACTLY this format, no extras, no numbers:
-
-Opportunities:
-- [single sentence: "[Observation]; [consequence or fix]." - qualitative only, no $ or %]
-- [single sentence in same pattern]
 
 Advisor: [2 sentences max, qualitative only${
     t.isDeficit
@@ -119,11 +116,6 @@ Advisor: [2 sentences max, qualitative only${
       return m ? m[1].trim() : "";
     };
 
-    const optimizationOpportunities = grab("Opportunities")
-      .split(/\n+/)
-      .map((l) => l.replace(/^[-*]\s*/, "").trim())
-      .filter(Boolean);
-
     const advisorNoteRaw = grab("Advisor").replace(/^\[|\]$/g, "").trim();
     let advisorNote = advisorNoteRaw || fallbackAdvisor(t);
     if (
@@ -139,10 +131,7 @@ Advisor: [2 sentences max, qualitative only${
     );
 
     res.json({
-      optimizationOpportunities:
-        optimizationOpportunities.length > 0
-          ? optimizationOpportunities
-          : fallbackOpportunities(t),
+      optimizationOpportunities,
       advisorNote,
       insightsSource: "ai" as const,
     });

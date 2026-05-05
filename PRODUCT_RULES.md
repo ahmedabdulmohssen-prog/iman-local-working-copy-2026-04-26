@@ -11,6 +11,13 @@
 - AI explains numbers and gives recommendations only
 - Necessary living costs should not be punished like waste spending
 - Score should reward retention, efficiency, and healthy behavior
+- Financial Score is based only on entered income and expense data
+- Financial Score must not estimate missing expenses
+- Analysis Confidence is based on input completeness only
+- Analysis Confidence must not change Financial Score
+- Plausibility Check detects unrealistic or incomplete lifestyle data
+- Plausibility Check must not change Financial Score or Analysis Confidence
+- Plausibility Check may add advisory messaging only
 
 ## UX Rules
 - Fast onboarding
@@ -34,4 +41,3 @@
 - Ship MVP before feature bloat
 - TASKLIST controls execution
 - BACKLOG stores future ideas
-
