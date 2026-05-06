@@ -8,10 +8,10 @@ type Expense = {
   id: string;
   amount: number;
   category: CategoryName;
+  subcategory?: string;
   note?: string;
   date: string;
 };
-type ActiveTab = "analysis" | "tracker";
 
 type RecommendedAction = { text: string; savings: number | null };
 type Difficulty = "Easy" | "Medium" | "Hard";
@@ -164,13 +164,6 @@ function buildDefaultCategories(): Record<CategoryName, Item[]> {
   return out;
 }
 
-function todayInputValue() {
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${today.getFullYear()}-${month}-${day}`;
-}
-
 function isCategoryName(value: unknown): value is CategoryName {
   return typeof value === "string" && CATEGORY_NAMES.includes(value as CategoryName);
 }
@@ -197,6 +190,10 @@ function loadStoredExpenses(): Expense[] {
         id: expense.id,
         amount: Number(expense.amount),
         category: expense.category,
+        subcategory:
+          typeof expense.subcategory === "string"
+            ? normalizeName(expense.subcategory)
+            : "",
         note: typeof expense.note === "string" ? expense.note : "",
         date: expense.date,
       }));
@@ -206,26 +203,29 @@ function loadStoredExpenses(): Expense[] {
 }
 
 function isCurrentMonthExpense(expense: Expense) {
-  const [year, month] = expense.date.split("-").map(Number);
+  const date = new Date(expense.date);
+  if (Number.isNaN(date.getTime())) return false;
   const now = new Date();
-  return year === now.getFullYear() && month === now.getMonth() + 1;
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }
 
 function buildCategoriesFromExpenses(expenses: Expense[]) {
   const next = buildDefaultCategories();
-  for (const name of CATEGORY_NAMES) {
-    const total = expenses
-      .filter((expense) => expense.category === name)
-      .reduce((sum, expense) => sum + expense.amount, 0);
-    if (total > 0) {
-      next[name] = [{ name: "Actual spending", amount: String(Math.round(total)) }];
-    }
+  for (const expense of expenses) {
+    next[expense.category] = [
+      ...next[expense.category],
+      {
+        name: normalizeName(
+          expense.subcategory || expense.note || expense.category,
+        ),
+        amount: String(expense.amount),
+      },
+    ];
   }
   return next;
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("analysis");
   const [income, setIncome] = useState("");
   const [creditScoreRange, setCreditScoreRange] = useState("740–799");
   const [categories, setCategories] = useState<Record<CategoryName, Item[]>>(
@@ -240,10 +240,18 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>(loadStoredExpenses);
+  const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [lastExpenseCategory, setLastExpenseCategory] =
+    useState<CategoryName>("Food");
 
   useEffect(() => {
     window.localStorage.setItem(EXPENSE_STORAGE_KEY, JSON.stringify(expenses));
   }, [expenses]);
+
+  const currentMonthExpenses = useMemo(
+    () => expenses.filter(isCurrentMonthExpense),
+    [expenses],
+  );
 
   const setCategoryItems = (name: CategoryName, items: Item[]) =>
     setCategories((prev) => ({ ...prev, [name]: items }));
@@ -360,12 +368,24 @@ function App() {
   };
 
   const analyzeWithActualSpending = async () => {
-    const currentMonthExpenses = expenses.filter(isCurrentMonthExpense);
     const actualCategories = buildCategoriesFromExpenses(currentMonthExpenses);
-    setCategories(actualCategories);
-    setExpanded(new Set<CategoryName>(CATEGORY_NAMES));
-    setActiveTab("analysis");
     await runAnalysis(actualCategories);
+  };
+
+  const addExpense = (expense: Omit<Expense, "id" | "date">) => {
+    setLastExpenseCategory(expense.category);
+    setExpenses((prev) => [
+      {
+        ...expense,
+        date: new Date().toISOString(),
+        id:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      },
+      ...prev,
+    ]);
+    setIsAddingExpense(false);
   };
 
   return (
@@ -416,7 +436,6 @@ function App() {
     </div>
   </header>
 
-        {activeTab === "analysis" ? (
         <div className="flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-5 sm:gap-6 lg:gap-8 lg:items-start min-w-0">
           <aside className="min-w-0 lg:sticky lg:top-8">
             <form
@@ -593,6 +612,23 @@ function App() {
                   "Run analysis"
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAddingExpense(true)}
+                className="w-full border border-zinc-800 bg-zinc-950/60 hover:bg-zinc-900 text-zinc-100 font-semibold py-3 rounded-xl transition"
+              >
+                Add Expense
+              </button>
+
+              <button
+                type="button"
+                onClick={analyzeWithActualSpending}
+                disabled={loading || currentMonthExpenses.length === 0}
+                className="w-full border border-zinc-800 bg-zinc-950/60 hover:bg-zinc-900 disabled:opacity-45 disabled:cursor-not-allowed text-zinc-100 font-semibold py-3 rounded-xl transition"
+              >
+                {loading ? "Analyzing..." : "Analyze with actual spending"}
+              </button>
             </form>
           </aside>
 
@@ -608,266 +644,49 @@ function App() {
             {result && <Results data={result} />}
           </main>
         </div>
-        ) : (
-          <TrackerScreen
-            expenses={expenses}
-            setExpenses={setExpenses}
-            categories={categories}
-            result={result}
-            income={Number(income) || 0}
-            onAnalyzeWithActuals={analyzeWithActualSpending}
-            loading={loading}
+
+        {isAddingExpense && (
+          <AddExpenseSheet
+            defaultCategory={lastExpenseCategory}
+            plannedCategories={categories}
+            onClose={() => setIsAddingExpense(false)}
+            onAdd={addExpense}
           />
         )}
       </div>
-      <BottomTabs activeTab={activeTab} onChange={setActiveTab} />
     </div>
-  );
-}
-
-function BottomTabs({
-  activeTab,
-  onChange,
-}: {
-  activeTab: ActiveTab;
-  onChange: (tab: ActiveTab) => void;
-}) {
-  const tabs: { id: ActiveTab; label: string }[] = [
-    { id: "analysis", label: "Analysis" },
-    { id: "tracker", label: "Tracker" },
-  ];
-
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-800/80 bg-black/88 backdrop-blur-xl px-3 py-3">
-      <div className="mx-auto grid max-w-md grid-cols-2 gap-2 rounded-2xl border border-zinc-800/80 bg-zinc-950/85 p-1.5 shadow-2xl shadow-black/40">
-        {tabs.map((tab) => {
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onChange(tab.id)}
-              className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                active
-                  ? "bg-blue-500 text-zinc-950 shadow-lg shadow-blue-500/15"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
-function TrackerScreen({
-  expenses,
-  setExpenses,
-  categories,
-  result,
-  income,
-  onAnalyzeWithActuals,
-  loading,
-}: {
-  expenses: Expense[];
-  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
-  categories: Record<CategoryName, Item[]>;
-  result: AnalyzeResponse | null;
-  income: number;
-  onAnalyzeWithActuals: () => Promise<void>;
-  loading: boolean;
-}) {
-  const [isAdding, setIsAdding] = useState(false);
-  const [lastCategory, setLastCategory] = useState<CategoryName>("Food");
-  const currentMonthExpenses = useMemo(
-    () => expenses.filter(isCurrentMonthExpense),
-    [expenses],
-  );
-  const plannedTotals = useMemo(() => {
-    const totals = {} as Record<CategoryName, number>;
-    for (const name of CATEGORY_NAMES) {
-      totals[name] = categories[name].reduce((sum, item) => {
-        const amount = Number(item.amount);
-        return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
-      }, 0);
-    }
-    return totals;
-  }, [categories]);
-  const actualTotals = useMemo(() => {
-    const totals = {} as Record<CategoryName, number>;
-    for (const name of CATEGORY_NAMES) totals[name] = 0;
-    for (const expense of currentMonthExpenses) {
-      totals[expense.category] += expense.amount;
-    }
-    return totals;
-  }, [currentMonthExpenses]);
-  const plannedSpend = CATEGORY_NAMES.reduce(
-    (sum, name) => sum + plannedTotals[name],
-    0,
-  );
-  const totalSpent = currentMonthExpenses.reduce(
-    (sum, expense) => sum + expense.amount,
-    0,
-  );
-  const plannedNetCashFlow =
-    result?.netCashFlow ?? (income > 0 ? income - plannedSpend : 0);
-  const remaining = plannedNetCashFlow - totalSpent;
-
-  const addExpense = (expense: Omit<Expense, "id">) => {
-    setLastCategory(expense.category);
-    setExpenses((prev) => [
-      {
-        ...expense,
-        id:
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      },
-      ...prev,
-    ]);
-    setIsAdding(false);
-  };
-
-  return (
-    <main className="relative min-h-[70vh] pb-20">
-      <div className="space-y-4 sm:space-y-5">
-        <Card title="This Month" eyebrow="Tracker">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Subtile
-              label="Total Spent"
-              value={`$${Math.round(totalSpent).toLocaleString()}`}
-              accent="blue"
-            />
-            <Subtile
-              label={remaining >= 0 ? "Remaining" : "Over"}
-              value={`$${Math.abs(Math.round(remaining)).toLocaleString()}`}
-              accent={remaining >= 0 ? "green" : "red"}
-            />
-          </div>
-          <div className="mt-4 flex flex-col sm:flex-row gap-2">
-            <button
-              type="button"
-              onClick={onAnalyzeWithActuals}
-              disabled={loading || currentMonthExpenses.length === 0}
-              className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-zinc-950 shadow-lg shadow-blue-600/15 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Analyzing..." : "Analyze with actual spending"}
-            </button>
-            <button
-              type="button"
-              disabled
-              className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm font-semibold text-zinc-500 opacity-45"
-            >
-              Scan receipt (coming soon)
-            </button>
-          </div>
-        </Card>
-
-        <Card title="Category Breakdown" eyebrow="Plan vs actual">
-          <div className="space-y-2.5">
-            {CATEGORY_NAMES.map((name) => {
-              const planned = plannedTotals[name];
-              const actual = actualTotals[name];
-              const over = actual > planned;
-              const delta = Math.round(actual - planned);
-              return (
-                <div
-                  key={name}
-                  className="rounded-xl border border-zinc-800/80 bg-zinc-950/55 p-3.5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-zinc-100">
-                        {name}
-                      </div>
-                      <div className="mt-1 text-xs text-zinc-500 tabular-nums">
-                        Planned ${Math.round(planned).toLocaleString()} · Actual $
-                        {Math.round(actual).toLocaleString()}
-                      </div>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wider ${
-                        over
-                          ? "border-rose-500/30 bg-rose-500/12 text-rose-200"
-                          : "border-emerald-500/24 bg-emerald-500/12 text-emerald-200"
-                      }`}
-                    >
-                      {over ? `Over (+$${delta.toLocaleString()})` : "On Track"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        {currentMonthExpenses.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-10 text-center">
-            <div className="text-zinc-200 font-medium">No expenses yet</div>
-            <div className="mt-1 text-sm text-zinc-500">
-              Start by adding your first expense.
-            </div>
-          </div>
-        ) : (
-          <Card title="Recent Expenses" eyebrow="This month">
-            <div className="space-y-2.5">
-              {currentMonthExpenses.slice(0, 8).map((expense) => (
-                <div
-                  key={expense.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/80 bg-zinc-950/55 px-3.5 py-3"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-zinc-100">
-                      {expense.category}
-                    </div>
-                    <div className="truncate text-xs text-zinc-500">
-                      {expense.note || expense.date}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-sm font-semibold tabular-nums text-zinc-100">
-                    ${Math.round(expense.amount).toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setIsAdding(true)}
-        className="fixed bottom-24 right-4 z-20 rounded-full bg-blue-500 px-5 py-3 text-sm font-bold text-zinc-950 shadow-2xl shadow-blue-500/20 transition hover:bg-blue-400"
-      >
-        + Add Expense
-      </button>
-
-      {isAdding && (
-        <AddExpenseSheet
-          defaultCategory={lastCategory}
-          onClose={() => setIsAdding(false)}
-          onAdd={addExpense}
-        />
-      )}
-    </main>
   );
 }
 
 function AddExpenseSheet({
   defaultCategory,
+  plannedCategories,
   onClose,
   onAdd,
 }: {
   defaultCategory: CategoryName;
+  plannedCategories: Record<CategoryName, Item[]>;
   onClose: () => void;
-  onAdd: (expense: Omit<Expense, "id">) => void;
+  onAdd: (expense: Omit<Expense, "id" | "date">) => void;
 }) {
   const amountRef = useRef<HTMLInputElement | null>(null);
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<CategoryName>(defaultCategory);
+  const [subcategory, setSubcategory] = useState("");
   const [note, setNote] = useState("");
+  const subcategoryOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      ...CATEGORY_DEFAULTS[category],
+      ...plannedCategories[category].map((item) => item.name),
+    ]
+      .map((name) => normalizeName(name))
+      .filter((name) => {
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      });
+  }, [category, plannedCategories]);
 
   useEffect(() => {
     amountRef.current?.focus({ preventScroll: true });
@@ -880,8 +699,8 @@ function AddExpenseSheet({
     onAdd({
       amount: parsedAmount,
       category,
+      subcategory: normalizeName(subcategory),
       note: note.trim(),
-      date: todayInputValue(),
     });
   };
 
@@ -942,7 +761,9 @@ function AddExpenseSheet({
             </span>
             <select
               value={category}
-              onChange={(event) => setCategory(event.target.value as CategoryName)}
+              onChange={(event) =>
+                setCategory(event.target.value as CategoryName)
+              }
               className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-3 text-sm text-zinc-100 transition focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
               {CATEGORY_NAMES.map((name) => (
@@ -951,6 +772,25 @@ function AddExpenseSheet({
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-zinc-500">
+              Subcategory
+            </span>
+            <input
+              type="text"
+              value={subcategory}
+              onChange={(event) => setSubcategory(event.target.value)}
+              list="expense-subcategory-options"
+              placeholder="Optional"
+              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-3 text-sm text-zinc-100 placeholder-zinc-700 transition focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <datalist id="expense-subcategory-options">
+              {subcategoryOptions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
           </label>
 
           <label className="block">

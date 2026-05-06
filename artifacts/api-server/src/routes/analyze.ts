@@ -20,6 +20,8 @@ router.post("/calculate", (req, res) => {
     weeklySafeSpend: t.weeklySafeSpend,
     totalExpenses: t.totalExpenses,
     categoryTotals: t.categoryTotals,
+    categoryClassifications: t.categoryClassifications,
+    controlTotals: t.controlTotals,
     subscriptionsTotal: t.subscriptionsTotal,
     foodTotal: t.foodTotal,
     servicesTotal: t.servicesTotal,

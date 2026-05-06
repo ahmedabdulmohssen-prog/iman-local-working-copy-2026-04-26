@@ -521,6 +521,34 @@ test("plausibility note stays quiet for deficit scenario", () => {
   assert.equal(result.plausibilityNote, null);
 });
 
+test("fixed costs stay in cash flow while controllable spend drives optimization", () => {
+  const result = computeTotals(
+    payload(7000, {
+      Housing: [item("Rent", 2200)],
+      Utilities: [item("Electricity", 180), item("Internet", 90)],
+      Food: [item("Groceries", 500), item("Eating Out", 900)],
+      Transportation: [item("Car Payment", 450), item("Fuel", 160)],
+      Subscriptions: [item("Streaming", 55), item("Gym", 85), item("News", 25)],
+      Personal: [item("Shopping", 450)],
+    }),
+  );
+
+  assert.equal(result.totalExpenses, 5095);
+  assert.equal(result.netCashFlow, 1905);
+  assert.equal(result.controlTotals.fixedCategoryTotals.Housing, 2200);
+  assert.equal(result.controlTotals.fixedCategoryTotals.Utilities, 270);
+  assert.equal(result.controlTotals.fixedCategoryTotals.Transportation, 450);
+  assert.equal(result.controlTotals.controllableCategoryTotals.Food, 1400);
+  assert.equal(result.categoryClassifications.Housing.controllable, false);
+  assert.equal(result.categoryClassifications.Food.type, "variable");
+  assert.equal(result.shortTermPriorities[0].key, "eating_out");
+  assert.ok(
+    result.wasteSignals.some(
+      (signal) => signal.key === "eating_out" && signal.triggered,
+    ),
+  );
+});
+
 let failures = 0;
 for (const { name, fn } of tests) {
   try {

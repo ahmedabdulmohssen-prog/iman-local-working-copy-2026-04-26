@@ -24,6 +24,26 @@ export const CATEGORY_NAMES = [
 export type CategoryName = (typeof CATEGORY_NAMES)[number];
 export type CategoryMap = Record<CategoryName, LineItem[]>;
 export type CategoryTotals = Record<CategoryName, number>;
+export type ExpenseControlType = "fixed" | "variable";
+export type ExpenseClassification = {
+  type: ExpenseControlType;
+  controllable: boolean;
+  optimizationPriority: number;
+};
+export type CategoryClassifications = Record<CategoryName, ExpenseClassification>;
+export type ClassifiedLineItem = LineItem &
+  ExpenseClassification & {
+    category: CategoryName;
+  };
+export type ClassifiedCategoryMap = Record<CategoryName, ClassifiedLineItem[]>;
+export type ControlTotals = {
+  fixedTotal: number;
+  variableTotal: number;
+  controllableTotal: number;
+  fixedCategoryTotals: CategoryTotals;
+  variableCategoryTotals: CategoryTotals;
+  controllableCategoryTotals: CategoryTotals;
+};
 
 export type Ratios = {
   savingsRate: number;
@@ -32,6 +52,7 @@ export type Ratios = {
   debtRatio: number;
   subscriptionRatio: number;
   controllableSpendRatio: number;
+  variableSpendRatio: number;
   leakageRatio: number;
   deficitRatio: number;
 };
@@ -71,7 +92,10 @@ export type PlausibilityCheck = {
 export type RecommendationInputs = {
   income: number;
   categories: CategoryMap;
+  classifiedCategories: ClassifiedCategoryMap;
+  categoryClassifications: CategoryClassifications;
   categoryTotals: CategoryTotals;
+  controlTotals: ControlTotals;
   housing: LineItem[];
   utilities: LineItem[];
   food: LineItem[];
@@ -140,6 +164,8 @@ export type AnalysisTotals = RecommendationInputs &
     rent: number;
     weeklySafeSpend: number;
     wasteSignals: WasteSignal[];
+    categoryClassifications: CategoryClassifications;
+    controlTotals: ControlTotals;
     inputCompleteness: InputCompleteness;
     analysisConfidence: AnalysisConfidence;
     inputCompletenessPrompt: string;
@@ -218,6 +244,120 @@ function secondaryImpactText(monthlyImpact: number): string {
   return `Estimated impact: ${fmt(monthly)}/mo, ${fmt(monthly * 12)}/yr.`;
 }
 
+const CATEGORY_CLASSIFICATIONS: CategoryClassifications = {
+  Housing: { type: "fixed", controllable: false, optimizationPriority: 5 },
+  Utilities: { type: "fixed", controllable: false, optimizationPriority: 15 },
+  Food: { type: "variable", controllable: true, optimizationPriority: 90 },
+  Transportation: { type: "fixed", controllable: false, optimizationPriority: 20 },
+  Services: { type: "variable", controllable: true, optimizationPriority: 75 },
+  Subscriptions: { type: "variable", controllable: true, optimizationPriority: 55 },
+  Debt: { type: "fixed", controllable: false, optimizationPriority: 10 },
+  Personal: { type: "variable", controllable: true, optimizationPriority: 80 },
+  Misc: { type: "variable", controllable: true, optimizationPriority: 85 },
+};
+
+const fixedNamePattern =
+  /\b(rent|mortgage|insurance|car payment|auto payment|vehicle payment|loan|minimum|utilities baseline|electricity|water|internet|phone)\b/i;
+const highPriorityVariablePattern =
+  /\b(eating out|takeout|take out|restaurant|delivery|coffee|shopping|entertainment|travel|hobby|impulse)\b/i;
+const lowPriorityVariablePattern = /\b(fuel|gas|parking|tolls?)\b/i;
+
+function classifyExpense(
+  category: CategoryName,
+  item: LineItem,
+): ExpenseClassification {
+  if (fixedNamePattern.test(item.name)) {
+    return { type: "fixed", controllable: false, optimizationPriority: 5 };
+  }
+
+  if (category === "Food" && /grocer/i.test(item.name)) {
+    return { type: "variable", controllable: true, optimizationPriority: 35 };
+  }
+
+  if (category === "Subscriptions") {
+    return { type: "variable", controllable: true, optimizationPriority: 55 };
+  }
+
+  if (highPriorityVariablePattern.test(item.name)) {
+    return { type: "variable", controllable: true, optimizationPriority: 95 };
+  }
+
+  if (lowPriorityVariablePattern.test(item.name)) {
+    return { type: "variable", controllable: true, optimizationPriority: 25 };
+  }
+
+  return CATEGORY_CLASSIFICATIONS[category];
+}
+
+function classifyCategories(categories: CategoryMap): ClassifiedCategoryMap {
+  const out = {} as ClassifiedCategoryMap;
+  for (const category of CATEGORY_NAMES) {
+    out[category] = categories[category].map((item) => ({
+      ...item,
+      category,
+      ...classifyExpense(category, item),
+    }));
+  }
+  return out;
+}
+
+function emptyCategoryTotals(): CategoryTotals {
+  return {
+    Housing: 0,
+    Utilities: 0,
+    Food: 0,
+    Transportation: 0,
+    Services: 0,
+    Subscriptions: 0,
+    Debt: 0,
+    Personal: 0,
+    Misc: 0,
+  };
+}
+
+function computeControlTotals(
+  classifiedCategories: ClassifiedCategoryMap,
+): ControlTotals {
+  const fixedCategoryTotals = emptyCategoryTotals();
+  const variableCategoryTotals = emptyCategoryTotals();
+  const controllableCategoryTotals = emptyCategoryTotals();
+
+  for (const category of CATEGORY_NAMES) {
+    for (const item of classifiedCategories[category]) {
+      if (item.type === "fixed") {
+        fixedCategoryTotals[category] += item.amount;
+      } else {
+        variableCategoryTotals[category] += item.amount;
+      }
+      if (item.controllable) {
+        controllableCategoryTotals[category] += item.amount;
+      }
+    }
+  }
+
+  const fixedTotal = CATEGORY_NAMES.reduce(
+    (total, category) => total + fixedCategoryTotals[category],
+    0,
+  );
+  const variableTotal = CATEGORY_NAMES.reduce(
+    (total, category) => total + variableCategoryTotals[category],
+    0,
+  );
+  const controllableTotal = CATEGORY_NAMES.reduce(
+    (total, category) => total + controllableCategoryTotals[category],
+    0,
+  );
+
+  return {
+    fixedTotal,
+    variableTotal,
+    controllableTotal,
+    fixedCategoryTotals,
+    variableCategoryTotals,
+    controllableCategoryTotals,
+  };
+}
+
 function confidenceReduction(
   baseReduction: number,
   confidence: AnalysisConfidence,
@@ -286,19 +426,16 @@ export function computeRatios(opts: {
   totalExpenses: number;
   netCashFlow: number;
   categoryTotals: CategoryTotals;
+  controlTotals: ControlTotals;
 }): Ratios {
-  const { income, totalExpenses, netCashFlow, categoryTotals } = opts;
-  const controllableSpend =
-    categoryTotals.Food +
-    categoryTotals.Services +
-    categoryTotals.Subscriptions +
-    categoryTotals.Personal +
-    categoryTotals.Misc;
+  const { income, totalExpenses, netCashFlow, categoryTotals, controlTotals } =
+    opts;
   const leakageSpend =
-    categoryTotals.Food +
-    categoryTotals.Services +
-    categoryTotals.Subscriptions +
-    categoryTotals.Misc;
+    controlTotals.controllableCategoryTotals.Food +
+    controlTotals.controllableCategoryTotals.Services +
+    controlTotals.controllableCategoryTotals.Subscriptions +
+    controlTotals.controllableCategoryTotals.Personal +
+    controlTotals.controllableCategoryTotals.Misc;
 
   return {
     savingsRate: ratio(netCashFlow, income),
@@ -306,7 +443,8 @@ export function computeRatios(opts: {
     housingRatio: ratio(categoryTotals.Housing, income),
     debtRatio: ratio(categoryTotals.Debt, income),
     subscriptionRatio: ratio(categoryTotals.Subscriptions, income),
-    controllableSpendRatio: ratio(controllableSpend, income),
+    controllableSpendRatio: ratio(controlTotals.controllableTotal, income),
+    variableSpendRatio: ratio(controlTotals.variableTotal, income),
     leakageRatio: ratio(leakageSpend, income),
     deficitRatio: netCashFlow < 0 ? ratio(Math.abs(netCashFlow), income) : 0,
   };
@@ -315,13 +453,25 @@ export function computeRatios(opts: {
 export function buildRecommendationInputs(opts: {
   income: number;
   categories: CategoryMap;
+  classifiedCategories: ClassifiedCategoryMap;
+  categoryClassifications: CategoryClassifications;
   categoryTotals: CategoryTotals;
+  controlTotals: ControlTotals;
   totalExpenses: number;
   netCashFlow: number;
   ratios: Ratios;
 }): RecommendationInputs {
-  const { income, categories, categoryTotals, totalExpenses, netCashFlow, ratios } =
-    opts;
+  const {
+    income,
+    categories,
+    classifiedCategories,
+    categoryClassifications,
+    categoryTotals,
+    controlTotals,
+    totalExpenses,
+    netCashFlow,
+    ratios,
+  } = opts;
   const food = categories.Food;
   const groceries = food
     .filter((it) => /grocer/i.test(it.name))
@@ -335,7 +485,10 @@ export function buildRecommendationInputs(opts: {
   return {
     income,
     categories,
+    classifiedCategories,
+    categoryClassifications,
     categoryTotals,
+    controlTotals,
     housing: categories.Housing,
     utilities: categories.Utilities,
     food,
@@ -370,16 +523,18 @@ function wasteSignal(opts: {
   amount: number;
   excess: number;
   income: number;
+  optimizationPriority?: number;
   explanation: string;
 }): WasteSignal {
   const excess = Math.max(0, Math.round(opts.excess));
   const severityBase = Math.max(150, opts.income * 0.05);
+  const priorityWeight = clamp((opts.optimizationPriority ?? 50) / 100, 0.1, 1);
   return {
     key: opts.key,
     label: opts.label,
     amount: Math.round(opts.amount),
     excess,
-    severity: excess > 0 ? clamp(excess / severityBase, 0.1, 1) : 0,
+    severity: excess > 0 ? clamp((excess / severityBase) * priorityWeight, 0.1, 1) : 0,
     triggered: excess > 0,
     explanation: opts.explanation,
   };
@@ -392,11 +547,16 @@ export function computeWasteSignals(inputs: RecommendationInputs): WasteSignal[]
     groceries,
     subscriptions,
     subscriptionsTotal,
-    servicesTotal,
-    personalTotal,
-    otherTotal,
-    utilitiesTotal,
+    controlTotals,
+    categoryClassifications,
   } = inputs;
+  const controllableServicesTotal =
+    controlTotals.controllableCategoryTotals.Services;
+  const controllablePersonalTotal =
+    controlTotals.controllableCategoryTotals.Personal;
+  const controllableOtherTotal = controlTotals.controllableCategoryTotals.Misc;
+  const controllableUtilitiesTotal =
+    controlTotals.controllableCategoryTotals.Utilities;
 
   const sortedSubscriptions = [...subscriptions].sort((a, b) => b.amount - a.amount);
   const topTwoSubscriptionTotal =
@@ -414,6 +574,7 @@ export function computeWasteSignals(inputs: RecommendationInputs): WasteSignal[]
           ? eatingOut - Math.max(groceries, 0.04 * income, 200)
           : 0,
       income,
+      optimizationPriority: 95,
       explanation: "Eating out is materially higher than groceries.",
     }),
     wasteSignal({
@@ -425,50 +586,55 @@ export function computeWasteSignals(inputs: RecommendationInputs): WasteSignal[]
           ? subscriptionsTotal - topTwoSubscriptionTotal
           : 0,
       income,
+      optimizationPriority: categoryClassifications.Subscriptions.optimizationPriority,
       explanation: "Recurring subscriptions exceed the lean baseline.",
     }),
     wasteSignal({
       key: "services",
       label: "Services",
-      amount: servicesTotal,
+      amount: controllableServicesTotal,
       excess:
-        servicesTotal > Math.max(0.08 * income, 250)
-          ? servicesTotal - Math.max(0.08 * income, 250)
+        controllableServicesTotal > Math.max(0.08 * income, 250)
+          ? controllableServicesTotal - Math.max(0.08 * income, 250)
           : 0,
       income,
+      optimizationPriority: categoryClassifications.Services.optimizationPriority,
       explanation: "Paid service frequency is high relative to income.",
     }),
     wasteSignal({
       key: "personal",
       label: "Personal",
-      amount: personalTotal,
+      amount: controllablePersonalTotal,
       excess:
-        personalTotal > Math.max(0.08 * income, 300)
-          ? personalTotal - Math.max(0.08 * income, 300)
+        controllablePersonalTotal > Math.max(0.08 * income, 300)
+          ? controllablePersonalTotal - Math.max(0.08 * income, 300)
           : 0,
       income,
+      optimizationPriority: categoryClassifications.Personal.optimizationPriority,
       explanation: "Personal spending is above the expected controllable range.",
     }),
     wasteSignal({
       key: "misc",
       label: "Misc",
-      amount: otherTotal,
+      amount: controllableOtherTotal,
       excess:
-        otherTotal > Math.max(0.03 * income, 150)
-          ? otherTotal - Math.max(0.03 * income, 150)
+        controllableOtherTotal > Math.max(0.03 * income, 150)
+          ? controllableOtherTotal - Math.max(0.03 * income, 150)
           : 0,
       income,
+      optimizationPriority: categoryClassifications.Misc.optimizationPriority,
       explanation: "Miscellaneous spend is large enough to hide leakage.",
     }),
     wasteSignal({
       key: "utilities",
       label: "Utilities",
-      amount: utilitiesTotal,
+      amount: controllableUtilitiesTotal,
       excess:
-        utilitiesTotal > Math.max(0.05 * income, 200)
-          ? utilitiesTotal - Math.max(0.05 * income, 200)
+        controllableUtilitiesTotal > Math.max(0.05 * income, 200)
+          ? controllableUtilitiesTotal - Math.max(0.05 * income, 200)
           : 0,
       income,
+      optimizationPriority: categoryClassifications.Utilities.optimizationPriority,
       explanation: "Utility plans may be worth auditing.",
     }),
   ];
@@ -618,15 +784,21 @@ function buildShortTerm(
     groceries,
     subscriptions,
     subscriptionsTotal,
-    servicesTotal,
-    otherTotal,
-    personalTotal,
-    utilitiesTotal,
+    controlTotals,
+    categoryClassifications,
     housing,
     transportation,
     debtTotal,
     isDeficit,
+    severeDeficit,
   } = opts;
+  const controllableServicesTotal =
+    controlTotals.controllableCategoryTotals.Services;
+  const controllableOtherTotal = controlTotals.controllableCategoryTotals.Misc;
+  const controllablePersonalTotal =
+    controlTotals.controllableCategoryTotals.Personal;
+  const controllableUtilitiesTotal =
+    controlTotals.controllableCategoryTotals.Utilities;
 
   const moves: RecommendationCandidate[] = [];
   const cutLead = confidence === "Low" ? "Try cutting" : "Cut";
@@ -649,7 +821,8 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
-        priorityScore: save + 75,
+        priorityScore:
+          save + categoryClassifications.Subscriptions.optimizationPriority,
       });
     }
   }
@@ -670,17 +843,17 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: eatingOut > 400 ? "Medium" : "Easy",
-        priorityScore: save + (eatingOut > groceries ? 250 : 0),
+        priorityScore: save + (eatingOut > groceries ? 250 : 0) + 95,
       });
     }
   }
 
-  if (servicesTotal > 0) {
+  if (controllableServicesTotal > 0) {
     const reductionPct = confidenceReduction(isDeficit ? 0.5 : 0.3, confidence);
     const newServices = roundMoneyForRecommendation(
-      servicesTotal * (1 - reductionPct),
+      controllableServicesTotal * (1 - reductionPct),
     );
-    const save = roundMoneyForRecommendation(servicesTotal - newServices);
+    const save = roundMoneyForRecommendation(controllableServicesTotal - newServices);
     if (save > 0) {
       const text = `${confidence === "Low" ? "Try spacing" : "Space"} out one paid-service appointment or rotate the lowest-value service off this month. ${secondaryImpactText(save)} Why it matters: the useful help stays, but convenience stops behaving like a fixed bill. ${impactText(save)}`;
       const parts = splitRecommendationText(text);
@@ -690,15 +863,17 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
-        priorityScore: save + 100,
+        priorityScore: save + categoryClassifications.Services.optimizationPriority,
       });
     }
   }
 
-  if (otherTotal > 50) {
+  if (controllableOtherTotal > 50) {
     const reductionPct = confidenceReduction(isDeficit ? 0.4 : 0.3, confidence);
-    const newOther = roundMoneyForRecommendation(otherTotal * (1 - reductionPct));
-    const save = roundMoneyForRecommendation(otherTotal - newOther);
+    const newOther = roundMoneyForRecommendation(
+      controllableOtherTotal * (1 - reductionPct),
+    );
+    const save = roundMoneyForRecommendation(controllableOtherTotal - newOther);
     if (save > 0) {
       const text = `${capLead} one weekly misc cap before buying extras. ${secondaryImpactText(save)} Why it matters: small unplanned purchases accumulate because each one feels harmless alone; batching them into one weekly decision stops the slow pile-up. ${impactText(save)}`;
       const parts = splitRecommendationText(text);
@@ -708,18 +883,18 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
-        priorityScore: save + 125,
+        priorityScore: save + categoryClassifications.Misc.optimizationPriority,
       });
     }
   }
 
   const personalThreshold = Math.max(0.08 * income, 300);
-  if (personalTotal > personalThreshold) {
+  if (controllablePersonalTotal > personalThreshold) {
     const reductionPct = confidenceReduction(isDeficit ? 0.25 : 0.2, confidence);
     const newPersonal = roundMoneyForRecommendation(
-      personalTotal * (1 - reductionPct),
+      controllablePersonalTotal * (1 - reductionPct),
     );
-    const save = roundMoneyForRecommendation(personalTotal - newPersonal);
+    const save = roundMoneyForRecommendation(controllablePersonalTotal - newPersonal);
     if (save > 0) {
       const text = `${confidence === "Low" ? "Try using" : "Use"} a 48-hour pause before nonessential buys this week. ${secondaryImpactText(save)} Why it matters: the pause keeps the purchases you actually want and blocks small upgrades from absorbing the surplus. ${impactText(save)}`;
       const parts = splitRecommendationText(text);
@@ -729,7 +904,7 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
-        priorityScore: save + 50,
+        priorityScore: save + categoryClassifications.Personal.optimizationPriority,
       });
     }
   }
@@ -738,7 +913,7 @@ function buildShortTerm(
     /insur/i.test(it.name),
   );
   const insuranceTotal = insuranceLines.reduce((s, it) => s + it.amount, 0);
-  if (insuranceTotal >= 80) {
+  if (insuranceTotal >= 250 || (severeDeficit && insuranceTotal >= 80)) {
     const save = roundMoneyForRecommendation(insuranceTotal * 0.12);
     if (save >= 5) {
       const text = `${runLead} one insurance quote check this week. ${secondaryImpactText(save)} Why it matters: this is a paperwork lever, not a lifestyle cut. ${impactText(save)}`;
@@ -749,14 +924,14 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Medium",
-        priorityScore: save + 25,
+        priorityScore: save + 5,
       });
     }
   }
 
   const utilThreshold = Math.max(0.05 * income, 200);
-  if (utilitiesTotal > utilThreshold) {
-    const save = roundMoneyForRecommendation(utilitiesTotal * 0.1);
+  if (controllableUtilitiesTotal > utilThreshold) {
+    const save = roundMoneyForRecommendation(controllableUtilitiesTotal * 0.1);
     if (save >= 5) {
       const text = `${runLead} one utility-plan audit this week. ${secondaryImpactText(save)} Why it matters: old plans often stay expensive after usage changes; a re-shop keeps the service and trims the drag. ${impactText(save)}`;
       const parts = splitRecommendationText(text);
@@ -766,12 +941,12 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
-        priorityScore: save,
+        priorityScore: save + categoryClassifications.Utilities.optimizationPriority,
       });
     }
   }
 
-  if (debtTotal > 0) {
+  if (debtTotal > Math.max(0.15 * income, 500) || severeDeficit) {
     const save = roundMoneyForRecommendation(debtTotal * 0.08);
     if (save >= 25) {
       const text = `${requestLead} one lower-rate debt review for the highest-rate balance. ${secondaryImpactText(save)} Why it matters: less payment pressure improves monthly oxygen while you keep paying the balance down. ${impactText(save)}`;
@@ -782,7 +957,7 @@ function buildShortTerm(
         insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Medium",
-        priorityScore: save + 25,
+        priorityScore: save + 10,
       });
     }
   }
@@ -860,9 +1035,11 @@ function optionalEfficientOptimization(
     groceries,
     subscriptions,
     subscriptionsTotal,
-    otherTotal,
-    servicesTotal,
+    controlTotals,
   } = opts;
+  const controllableOtherTotal = controlTotals.controllableCategoryTotals.Misc;
+  const controllableServicesTotal =
+    controlTotals.controllableCategoryTotals.Services;
 
   const softLead = confidence === "Medium" ? "If you want one light tune-up" : "Optional tune-up";
   const minorLimit = Math.max(75, income * 0.015);
@@ -907,8 +1084,8 @@ function optionalEfficientOptimization(
     }
   }
 
-  if (otherTotal > Math.max(150, income * 0.02)) {
-    const save = roundMoneyForRecommendation(otherTotal * 0.15);
+  if (controllableOtherTotal > Math.max(150, income * 0.02)) {
+    const save = roundMoneyForRecommendation(controllableOtherTotal * 0.15);
     if (save >= 25 && save <= minorLimit) {
       const text = `${softLead}: set one weekly misc cap before extra purchases. ${secondaryImpactText(save)} Why it matters: small unplanned buys stack quietly, so one cap keeps them visible without making the budget feel tight. ${impactText(save)}`;
       const parts = splitRecommendationText(text);
@@ -923,8 +1100,8 @@ function optionalEfficientOptimization(
     }
   }
 
-  if (servicesTotal > Math.max(150, income * 0.02)) {
-    const save = roundMoneyForRecommendation(servicesTotal * 0.15);
+  if (controllableServicesTotal > Math.max(150, income * 0.02)) {
+    const save = roundMoneyForRecommendation(controllableServicesTotal * 0.15);
     if (save >= 25 && save <= minorLimit) {
       const text = `${softLead}: space out one paid service this month. ${secondaryImpactText(save)} Why it matters: the service can stay, but a slightly slower cadence keeps convenience from becoming automatic. ${impactText(save)}`;
       const parts = splitRecommendationText(text);
@@ -985,18 +1162,19 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
     income,
     housingTotal,
     transportationTotal,
-    foodTotal,
-    subscriptionsTotal,
-    otherTotal,
     debt,
     debtTotal,
+    eatingOut,
+    controlTotals,
     ratios,
-    isDeficit,
     severeDeficit,
   } = opts;
 
   const moves: Priority[] = [];
-  const leakageTotal = foodTotal + subscriptionsTotal + otherTotal;
+  const leakageTotal =
+    eatingOut +
+    controlTotals.controllableCategoryTotals.Subscriptions +
+    controlTotals.controllableCategoryTotals.Misc;
 
   if (debt.length >= 2 || (income > 0 && debtTotal > 0.1 * income)) {
     const save = roundMoneyForRecommendation(Math.max(40, debtTotal * 0.15));
@@ -1185,6 +1363,7 @@ export function computeFinancialScore(opts: {
   totalExpenses: number;
   ratios: Ratios;
   wasteSignals: WasteSignal[];
+  controlTotals: ControlTotals;
   subscriptions: LineItem[];
   subscriptionsTotal: number;
   housingTotal: number;
@@ -1197,6 +1376,7 @@ export function computeFinancialScore(opts: {
     totalExpenses,
     ratios,
     wasteSignals,
+    controlTotals,
     subscriptions,
     subscriptionsTotal,
     housingTotal,
@@ -1206,8 +1386,14 @@ export function computeFinancialScore(opts: {
   } = opts;
 
   const savingsRatePts = cashRetentionPoints(ratios.savingsRate);
+  const controllablePressure = clamp(
+    (ratios.controllableSpendRatio - 0.35) / 0.25,
+    0,
+    1,
+  );
   const wasteLoad = clamp(
-    wasteSignals.reduce((s, signal) => s + signal.severity, 0) / 2.5,
+    wasteSignals.reduce((s, signal) => s + signal.severity, 0) / 2.5 +
+      controllablePressure * 0.35,
     0,
     1,
   );
@@ -1241,8 +1427,8 @@ export function computeFinancialScore(opts: {
       max: 25,
       explanation:
         wasteSignals.length === 0
-          ? "No major controllable waste signals are triggering from the visible inputs."
-          : `${wasteSignals.length} controllable waste signal${wasteSignals.length === 1 ? "" : "s"} triggered across food, services, personal, utilities, or misc spend.`,
+          ? `Controllable spending is ${pct(ratios.controllableSpendRatio)} of income; no major controllable waste signals are triggering from the visible inputs.`
+          : `${wasteSignals.length} controllable waste signal${wasteSignals.length === 1 ? "" : "s"} triggered against ${fmt(controlTotals.controllableTotal)}/mo of controllable spend.`,
     },
     {
       name: "Debt Burden",
@@ -1320,6 +1506,8 @@ export function computeTotals(body: unknown): AnalysisTotals {
   const raw = asRecord(body);
   const income = Number(raw["income"]) || 0;
   const categories = normalizeCategories(raw["categories"]);
+  const classifiedCategories = classifyCategories(categories);
+  const controlTotals = computeControlTotals(classifiedCategories);
 
   const categoryTotals: CategoryTotals = {
     Housing: sum(categories.Housing),
@@ -1343,11 +1531,15 @@ export function computeTotals(body: unknown): AnalysisTotals {
     totalExpenses,
     netCashFlow,
     categoryTotals,
+    controlTotals,
   });
   const recommendationInputs = buildRecommendationInputs({
     income,
     categories,
+    classifiedCategories,
+    categoryClassifications: CATEGORY_CLASSIFICATIONS,
     categoryTotals,
+    controlTotals,
     totalExpenses,
     netCashFlow,
     ratios,
@@ -1372,6 +1564,7 @@ export function computeTotals(body: unknown): AnalysisTotals {
     totalExpenses,
     ratios,
     wasteSignals,
+    controlTotals,
     subscriptions: recommendationInputs.subscriptions,
     subscriptionsTotal: recommendationInputs.subscriptionsTotal,
     housingTotal: recommendationInputs.housingTotal,
@@ -1397,6 +1590,8 @@ export function computeTotals(body: unknown): AnalysisTotals {
     rent: recommendationInputs.housingTotal,
     weeklySafeSpend: Math.round(netCashFlow / 4),
     wasteSignals,
+    categoryClassifications: CATEGORY_CLASSIFICATIONS,
+    controlTotals,
     inputCompleteness,
     analysisConfidence: inputCompleteness.confidence,
     inputCompletenessPrompt: inputCompleteness.prompt,
