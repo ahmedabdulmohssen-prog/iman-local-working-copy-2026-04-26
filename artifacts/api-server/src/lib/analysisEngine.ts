@@ -5,6 +5,8 @@ export type Priority = {
   text: string;
   monthlyImpact: number | null;
   difficulty: Difficulty;
+  insight?: string;
+  key?: string;
 };
 
 export const CATEGORY_NAMES = [
@@ -211,6 +213,11 @@ function impactText(monthlyImpact: number): string {
   return `Impact: ${fmt(monthly)}/mo, ${fmt(monthly * 12)}/yr.`;
 }
 
+function secondaryImpactText(monthlyImpact: number): string {
+  const monthly = roundMoneyForRecommendation(monthlyImpact);
+  return `Estimated impact: ${fmt(monthly)}/mo, ${fmt(monthly * 12)}/yr.`;
+}
+
 function confidenceReduction(
   baseReduction: number,
   confidence: AnalysisConfidence,
@@ -220,7 +227,24 @@ function confidenceReduction(
   return baseReduction;
 }
 
+function splitRecommendationText(text: string): { action: string; insight: string } {
+  const [actionPart, rest = ""] = text.split(" Why it matters:");
+  const [whyPart = "", impactPart = ""] = rest.split(" Impact:");
+  const action = actionPart.trim();
+  const why = whyPart.trim();
+  const impact = impactPart.trim();
+  const insight = [
+    why ? `Why it matters: ${why}` : "",
+    impact ? `Impact: ${impact}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return { action, insight: insight || action };
+}
+
 type RecommendationCandidate = Priority & {
+  insight: string;
+  key: string;
   priorityScore: number;
 };
 
@@ -605,9 +629,9 @@ function buildShortTerm(
   } = opts;
 
   const moves: RecommendationCandidate[] = [];
-  const reduceLead = confidence === "Low" ? "Try reducing" : "Reduce";
+  const cutLead = confidence === "Low" ? "Try cutting" : "Cut";
   const pauseLead = confidence === "Low" ? "Try pausing" : "Pause";
-  const capLead = confidence === "Low" ? "Try a" : "Use a";
+  const capLead = confidence === "Low" ? "Try setting" : "Set";
   const runLead = confidence === "Low" ? "Try running" : "Run";
   const requestLead = confidence === "Low" ? "Try requesting" : "Request";
 
@@ -617,8 +641,12 @@ function buildShortTerm(
     const dropped = subscriptions.length - 2;
     const save = roundMoneyForRecommendation(subscriptionsTotal - top2Total);
     if (save > 0) {
+      const text = `${pauseLead} ${dropped} lower-use subscription${dropped === 1 ? "" : "s"} this week and keep only the recurring services used weekly. ${secondaryImpactText(save)} Why it matters: subscriptions turn forgotten choices into automatic monthly withdrawals, so usage has to earn the renewal. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text: `${pauseLead} ${dropped} lower-use subscription${dropped === 1 ? "" : "s"} and keep only the recurring services used weekly. Why it matters: subscriptions turn forgotten choices into automatic monthly withdrawals, so usage has to earn the renewal. ${impactText(save)}`,
+        key: "subscriptions",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 75,
@@ -634,9 +662,12 @@ function buildShortTerm(
         eatingOut > groceries
           ? `Why it matters: takeout is ${fmtRecommendation(eatingOut)}/mo versus ${fmtRecommendation(groceries)}/mo in groceries, so convenience is outrunning the actual meal plan.`
           : "Why it matters: this is flexible food spend, so fewer takeout runs protects lifestyle better than cutting fixed bills.";
-      const text = `${reduceLead} takeout by ${fmtRecommendation(save)}/mo by cutting one or two runs each week. ${why} ${impactText(save)}`;
+      const text = `${cutLead} 1-2 takeout meals this week. ${secondaryImpactText(save)} ${why} ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text,
+        key: "eating_out",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: eatingOut > 400 ? "Medium" : "Easy",
         priorityScore: save + (eatingOut > groceries ? 250 : 0),
@@ -651,8 +682,12 @@ function buildShortTerm(
     );
     const save = roundMoneyForRecommendation(servicesTotal - newServices);
     if (save > 0) {
+      const text = `${confidence === "Low" ? "Try spacing" : "Space"} out one paid-service appointment or rotate the lowest-value service off this month. ${secondaryImpactText(save)} Why it matters: the useful help stays, but convenience stops behaving like a fixed bill. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text: `${reduceLead} paid-service frequency by ${fmtRecommendation(save)}/mo by spacing appointments out or rotating the lowest-value service off for a month. Why it matters: the useful help stays, but convenience stops behaving like a fixed bill. ${impactText(save)}`,
+        key: "services",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 100,
@@ -665,8 +700,12 @@ function buildShortTerm(
     const newOther = roundMoneyForRecommendation(otherTotal * (1 - reductionPct));
     const save = roundMoneyForRecommendation(otherTotal - newOther);
     if (save > 0) {
+      const text = `${capLead} one weekly misc cap before buying extras. ${secondaryImpactText(save)} Why it matters: small unplanned purchases accumulate because each one feels harmless alone; batching them into one weekly decision stops the slow pile-up. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text: `${capLead} miscellaneous cap near ${fmtRecommendation(newOther)}/mo and hold back ${fmtRecommendation(save)}/mo. Why it matters: small unplanned purchases accumulate because each one feels harmless alone; batching them into one weekly decision stops the slow pile-up. ${impactText(save)}`,
+        key: "misc",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 125,
@@ -682,8 +721,12 @@ function buildShortTerm(
     );
     const save = roundMoneyForRecommendation(personalTotal - newPersonal);
     if (save > 0) {
+      const text = `${confidence === "Low" ? "Try using" : "Use"} a 48-hour pause before nonessential buys this week. ${secondaryImpactText(save)} Why it matters: the pause keeps the purchases you actually want and blocks small upgrades from absorbing the surplus. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text: `${capLead} personal-spending cap near ${fmtRecommendation(newPersonal)}/mo, then space nonessential buys by 48 hours to save ${fmtRecommendation(save)}/mo. Why it matters: the pause keeps the purchases you actually want and blocks small upgrades from absorbing the surplus. ${impactText(save)}`,
+        key: "personal",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 50,
@@ -698,8 +741,12 @@ function buildShortTerm(
   if (insuranceTotal >= 80) {
     const save = roundMoneyForRecommendation(insuranceTotal * 0.12);
     if (save >= 5) {
+      const text = `${runLead} one insurance quote check this week. ${secondaryImpactText(save)} Why it matters: this is a paperwork lever, not a lifestyle cut. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text: `${runLead} a quote check on the current ${fmtRecommendation(insuranceTotal)}/mo insurance spend and look for about ${fmtRecommendation(save)}/mo in premium relief. Why it matters: this is a paperwork lever, not a lifestyle cut. ${impactText(save)}`,
+        key: "insurance",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Medium",
         priorityScore: save + 25,
@@ -711,8 +758,12 @@ function buildShortTerm(
   if (utilitiesTotal > utilThreshold) {
     const save = roundMoneyForRecommendation(utilitiesTotal * 0.1);
     if (save >= 5) {
+      const text = `${runLead} one utility-plan audit this week. ${secondaryImpactText(save)} Why it matters: old plans often stay expensive after usage changes; a re-shop keeps the service and trims the drag. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text: `${runLead} a utility-plan audit on the current ${fmtRecommendation(utilitiesTotal)}/mo total and look for about ${fmtRecommendation(save)}/mo in lower rates. Why it matters: old plans often stay expensive after usage changes; a re-shop keeps the service and trims the drag. ${impactText(save)}`,
+        key: "utilities",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save,
@@ -723,8 +774,12 @@ function buildShortTerm(
   if (debtTotal > 0) {
     const save = roundMoneyForRecommendation(debtTotal * 0.08);
     if (save >= 25) {
+      const text = `${requestLead} one lower-rate debt review for the highest-rate balance. ${secondaryImpactText(save)} Why it matters: less payment pressure improves monthly oxygen while you keep paying the balance down. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       moves.push({
-        text: `${requestLead} a lower-rate debt review on ${fmtRecommendation(debtTotal)}/mo of payments and look for about ${fmtRecommendation(save)}/mo of payment relief. Why it matters: less payment pressure improves monthly oxygen while you keep paying the balance down. ${impactText(save)}`,
+        key: "debt",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Medium",
         priorityScore: save + 25,
@@ -738,8 +793,10 @@ function buildShortTerm(
       if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
       return (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0);
     });
-  return withImpact.slice(0, 3).map(({ text, monthlyImpact, difficulty }) => ({
+  return withImpact.slice(0, 3).map(({ text, insight, key, monthlyImpact, difficulty }) => ({
     text,
+    insight,
+    key,
     monthlyImpact,
     difficulty,
   }));
@@ -817,8 +874,12 @@ function optionalEfficientOptimization(
     const dropped = subscriptions.length - 2;
     const save = roundMoneyForRecommendation(subscriptionsTotal - top2Total);
     if (save >= 25 && save <= minorLimit) {
+      const text = `${softLead}: pause ${dropped} lower-use subscription${dropped === 1 ? "" : "s"} this week. ${secondaryImpactText(save)} Why it matters: this is small maintenance, not a lifestyle correction. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       candidates.push({
-        text: `${softLead}: pause ${dropped} lower-use subscription${dropped === 1 ? "" : "s"} and keep only what gets weekly use. Why it matters: this is small maintenance, not a lifestyle correction. ${impactText(save)}`,
+        key: "subscriptions",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 40,
@@ -833,8 +894,12 @@ function optionalEfficientOptimization(
         eatingOut > groceries
           ? `takeout is ${fmtRecommendation(eatingOut)}/mo versus ${fmtRecommendation(groceries)}/mo in groceries`
           : `takeout is ${fmtRecommendation(eatingOut)}/mo and still flexible`;
+      const text = `${softLead}: skip one takeout meal this week. ${secondaryImpactText(save)} Why it matters: ${behavior}, so a small frequency change is enough; this is not a major cut. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       candidates.push({
-        text: `${softLead}: reduce takeout frequency slightly, about ${fmtRecommendation(save)}/mo. Why it matters: ${behavior}, so a small frequency change is enough; this is not a major cut. ${impactText(save)}`,
+        key: "eating_out",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + (eatingOut > groceries ? 30 : 10),
@@ -845,8 +910,12 @@ function optionalEfficientOptimization(
   if (otherTotal > Math.max(150, income * 0.02)) {
     const save = roundMoneyForRecommendation(otherTotal * 0.15);
     if (save >= 25 && save <= minorLimit) {
+      const text = `${softLead}: set one weekly misc cap before extra purchases. ${secondaryImpactText(save)} Why it matters: small unplanned buys stack quietly, so one cap keeps them visible without making the budget feel tight. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       candidates.push({
-        text: `${softLead}: set a weekly misc cap and hold back about ${fmtRecommendation(save)}/mo. Why it matters: small unplanned buys stack quietly, so one cap keeps them visible without making the budget feel tight. ${impactText(save)}`,
+        key: "misc",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 20,
@@ -857,8 +926,12 @@ function optionalEfficientOptimization(
   if (servicesTotal > Math.max(150, income * 0.02)) {
     const save = roundMoneyForRecommendation(servicesTotal * 0.15);
     if (save >= 25 && save <= minorLimit) {
+      const text = `${softLead}: space out one paid service this month. ${secondaryImpactText(save)} Why it matters: the service can stay, but a slightly slower cadence keeps convenience from becoming automatic. ${impactText(save)}`;
+      const parts = splitRecommendationText(text);
       candidates.push({
-        text: `${softLead}: space out one paid service and save about ${fmtRecommendation(save)}/mo. Why it matters: the service can stay, but a slightly slower cadence keeps convenience from becoming automatic. ${impactText(save)}`,
+        key: "services",
+        text: parts.action,
+        insight: parts.insight,
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save,
@@ -870,6 +943,8 @@ function optionalEfficientOptimization(
   if (!best) return null;
   return {
     text: best.text,
+    insight: best.insight,
+    key: best.key,
     monthlyImpact: best.monthlyImpact,
     difficulty: best.difficulty,
   };
@@ -881,7 +956,9 @@ function buildEfficientUserOpportunities(
 ): SavingsOpportunities {
   const surplus = roundMoneyForRecommendation(opts.netCashFlow);
   const guidance: Priority = {
-    text: `You're in a strong position: spending is balanced and current surplus is ${fmt(surplus)}/mo, or ${fmt(surplus * 12)}/yr. Direct that cash flow toward savings or investments first. Why it matters: with low leakage, compounding surplus will do more than chasing a handful of small cuts.`,
+    key: "allocation",
+    text: `Direct the ${fmt(surplus)}/mo surplus toward savings or investments first.`,
+    insight: `You're in a strong position: spending is balanced and current surplus is ${fmt(surplus)}/mo, or ${fmt(surplus * 12)}/yr. Why it matters: with low leakage, compounding surplus will do more than chasing a handful of small cuts.`,
     monthlyImpact: null,
     difficulty: "Easy",
   };
@@ -919,21 +996,12 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
   } = opts;
 
   const moves: Priority[] = [];
-  const savingsRate = ratios.savingsRate;
   const leakageTotal = foodTotal + subscriptionsTotal + otherTotal;
-
-  if (income > 0 && (savingsRate < 0.1 || isDeficit)) {
-    const target = roundMoneyForRecommendation(income * 0.1);
-    moves.push({
-      text: `Pursue a raise, promotion, or higher-paying role that adds roughly ${fmtRecommendation(target)}/mo. Why it matters: when retention is thin, income growth widens the margin without forcing extreme lifestyle cuts. ${impactText(target)}`,
-      monthlyImpact: target,
-      difficulty: "Hard",
-    });
-  }
 
   if (debt.length >= 2 || (income > 0 && debtTotal > 0.1 * income)) {
     const save = roundMoneyForRecommendation(Math.max(40, debtTotal * 0.15));
     moves.push({
+      key: "debt_restructure",
       text:
         debt.length >= 2
           ? `Compare consolidation options for ${debt.length} debt balances and look for about ${fmtRecommendation(save)}/mo of payment relief. Why it matters: scattered payments reduce flexibility; one lower-rate structure can return cash flow without pretending the debt disappeared. ${impactText(save)}`
@@ -947,6 +1015,7 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
   if (leakageRatio > 0.25 && leakageTotal > 0) {
     const save = roundMoneyForRecommendation(leakageTotal * 0.2);
     moves.push({
+      key: "recurring_costs",
       text: `Simplify food, subscriptions, and misc by about ${fmtRecommendation(save)}/mo over 6 months. Why it matters: the combined bundle is ${fmtRecommendation(leakageTotal)}/mo, so small leaks across several categories are acting like one large bill. ${impactText(save)}`,
       monthlyImpact: save,
       difficulty: "Medium",
@@ -958,6 +1027,7 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
     const save = roundMoneyForRecommendation(housingTotal - newHousing);
     if (save > 0) {
       moves.push({
+        key: "housing",
         text: `At lease renewal, compare housing options in the ${fmtRecommendation(newHousing)}/mo range and look for about ${fmtRecommendation(save)}/mo of relief. Why it matters: housing is a fixed-cost anchor, so improving it changes every future month. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Hard",
@@ -974,6 +1044,7 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
     const save = roundMoneyForRecommendation(transportationTotal - newTransport);
     if (save > 0) {
       moves.push({
+        key: "transportation",
         text: `At the next vehicle decision, choose a payment, insurance, and fuel setup around ${fmtRecommendation(newTransport)}/mo and free about ${fmtRecommendation(save)}/mo. Why it matters: vehicle costs behave like fixed costs, and lowering them frees cash without touching daily essentials. ${impactText(save)}`,
         monthlyImpact: save,
         difficulty: "Hard",
@@ -990,15 +1061,6 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
     .filter((m) => !isHeavy(m))
     .sort((a, b) => (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0));
 
-  if (!severeDeficit && heavy.length > 0 && rest.length === 0 && income > 0) {
-    const target = roundMoneyForRecommendation(income * 0.1);
-    rest.push({
-      text: `Pursue a raise, promotion, or higher-paying role that adds roughly ${fmtRecommendation(target)}/mo. Why it matters: more income can widen the margin without forcing an extreme fixed-cost move. ${impactText(target)}`,
-      monthlyImpact: target,
-      difficulty: "Hard",
-    });
-  }
-
   const ordered = severeDeficit ? [...heavy, ...rest] : [...rest, ...heavy];
   return ordered.slice(0, 3);
 }
@@ -1012,7 +1074,14 @@ export function computeSavingsOpportunities(
   }
 
   const shortTermPriorities = buildShortTerm(inputs, confidence);
-  const longTermOpportunities = buildLongTerm(inputs);
+  const usedConcepts = new Set(
+    shortTermPriorities
+      .map((m) => m.key)
+      .filter((key): key is string => typeof key === "string"),
+  );
+  const longTermOpportunities = buildLongTerm(inputs)
+    .filter((m) => !m.key || !usedConcepts.has(m.key))
+    .slice(0, Math.max(0, 3 - shortTermPriorities.length));
   const monthlySavings = shortTermPriorities.reduce(
     (s, m) => s + (typeof m.monthlyImpact === "number" ? m.monthlyImpact : 0),
     0,
@@ -1338,10 +1407,10 @@ export function computeTotals(body: unknown): AnalysisTotals {
 
 export function fallbackOpportunities(t: AnalysisTotals): string[] {
   return t.shortTermPriorities
-    .filter((move) => typeof move.monthlyImpact === "number")
+    .filter((move) => move.insight || typeof move.monthlyImpact === "number")
     .sort((a, b) => (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0))
     .slice(0, 3)
-    .map((move) => move.text);
+    .map((move) => move.insight ?? move.text);
 }
 
 export function fallbackAdvisor(t: AnalysisTotals): string {

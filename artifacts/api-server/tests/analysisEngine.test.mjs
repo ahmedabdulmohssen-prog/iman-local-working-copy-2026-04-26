@@ -19,7 +19,9 @@ await build({
   logLevel: "silent",
 });
 
-const { computeTotals } = await import(pathToFileURL(bundledEngine).href);
+const { computeTotals, fallbackOpportunities } = await import(
+  pathToFileURL(bundledEngine).href
+);
 
 const CATEGORIES = [
   "Housing",
@@ -58,11 +60,27 @@ function assertImpactText(move) {
   assert.ok(move.monthlyImpact > 0);
   assert.equal("priorityScore" in move, false);
   assert.equal(move.monthlyImpact % 5, 0);
-  assert.match(move.text, /Why it matters:/);
+  assert.doesNotMatch(move.text, /Why it matters:/);
+  assert.doesNotMatch(move.text, /\b(?:reduce|cut) by \$?\d/i);
+  assert.match(move.text, /Estimated impact:/);
   assert.match(move.text, /\$\d[\d,]*\/mo/);
-  assert.match(move.text, /\$\d[\d,]*\/yr/);
+  assert.match(move.insight, /Why it matters:/);
+  assert.match(move.insight, /\$\d[\d,]*\/yr/);
+  const impact = move.insight.match(/Impact: \$(\d[\d,]*)\/mo, \$(\d[\d,]*)\/yr\./);
+  assert.ok(impact, `Missing insight impact text: ${move.insight}`);
+  const monthly = Number(impact[1].replace(/,/g, ""));
+  const yearly = Number(impact[2].replace(/,/g, ""));
+  assert.equal(monthly, move.monthlyImpact);
+  assert.equal(yearly, monthly * 12);
+}
+
+function assertLongTermImpactText(move) {
+  assert.equal(typeof move.monthlyImpact, "number");
+  assert.ok(move.monthlyImpact > 0);
+  assert.equal(move.monthlyImpact % 5, 0);
+  assert.match(move.text, /Why it matters:/);
   const impact = move.text.match(/Impact: \$(\d[\d,]*)\/mo, \$(\d[\d,]*)\/yr\./);
-  assert.ok(impact, `Missing impact text: ${move.text}`);
+  assert.ok(impact, `Missing long-term impact text: ${move.text}`);
   const monthly = Number(impact[1].replace(/,/g, ""));
   const yearly = Number(impact[2].replace(/,/g, ""));
   assert.equal(monthly, move.monthlyImpact);
@@ -113,11 +131,11 @@ test("efficient users get validation and cash flow guidance instead of small cut
 
   const guidance = result.shortTermPriorities[0];
   assert.equal(guidance.monthlyImpact, null);
-  assert.match(guidance.text, /You're in a strong position/);
-  assert.match(guidance.text, /spending is balanced/);
-  assert.match(guidance.text, /surplus is \$5,770\/mo, or \$69,240\/yr/);
-  assert.match(guidance.text, /savings or investments/);
-  assert.match(guidance.text, /more than chasing .* small cuts/);
+  assert.match(guidance.text, /Direct the \$5,770\/mo surplus/);
+  assert.match(guidance.insight, /You're in a strong position/);
+  assert.match(guidance.insight, /spending is balanced/);
+  assert.match(guidance.insight, /surplus is \$5,770\/mo, or \$69,240\/yr/);
+  assert.match(guidance.insight, /more than chasing .* small cuts/);
 
   const optionalCuts = result.shortTermPriorities.filter(
     (move) => typeof move.monthlyImpact === "number",
@@ -127,6 +145,7 @@ test("efficient users get validation and cash flow guidance instead of small cut
   assert.equal(result.annualWaste, 480);
   assertImpactText(optionalCuts[0]);
   assert.match(optionalCuts[0].text, /Optional tune-up/);
+  assert.doesNotMatch(optionalCuts[0].text, /Why it matters:/);
 });
 
 test("paycheck to paycheck high income leakage produces low trust score and targeted actions", () => {
@@ -232,8 +251,14 @@ test("recommendations are impact-ranked and include monthly and yearly numbers",
 
   assert.ok(result.shortTermPriorities.length >= 2);
   assert.ok(result.shortTermPriorities.length <= 3);
+  assert.ok(result.shortTermPriorities.length + result.longTermOpportunities.length <= 3);
   result.shortTermPriorities.forEach(assertImpactText);
-  result.longTermOpportunities.forEach(assertImpactText);
+  result.longTermOpportunities.forEach(assertLongTermImpactText);
+  fallbackOpportunities(result).forEach((line) => {
+    assert.match(line, /Why it matters:/);
+    assert.match(line, /Impact:/);
+    assert.doesNotMatch(line, /cutting one or two runs|weekly misc cap|space appointments/i);
+  });
 
   const impacts = result.shortTermPriorities.map((move) => move.monthlyImpact);
   assert.deepEqual(
@@ -260,8 +285,8 @@ test("low confidence recommendations use softer targets without changing score o
 
   assert.equal(low.analysisConfidence, "Low");
   assert.equal(high.analysisConfidence, "High");
-  assert.ok(low.shortTermPriorities[0].text.startsWith("Try reducing "));
-  assert.ok(high.shortTermPriorities[0].text.startsWith("Reduce "));
+  assert.ok(low.shortTermPriorities[0].text.startsWith("Try cutting "));
+  assert.ok(high.shortTermPriorities[0].text.startsWith("Cut "));
   assert.equal(low.scoreAdjustedForCompleteness, false);
   assert.equal(high.scoreAdjustedForCompleteness, false);
   assert.equal(low.plausibilityCheck.triggered, false);
@@ -285,14 +310,14 @@ test("recommendation display rounds to nearest five and annualizes rounded month
   assert.ok(foodMove);
   assertImpactText(foodMove);
   assert.equal(foodMove.monthlyImpact, 135);
-  assert.match(foodMove.text, /Reduce takeout by \$135\/mo/);
-  assert.match(foodMove.text, /cutting one or two runs each week/);
-  assert.match(foodMove.text, /takeout is \$335\/mo versus \$100\/mo/);
+  assert.match(foodMove.text, /Cut 1-2 takeout meals this week/);
+  assert.match(foodMove.text, /Estimated impact: \$135\/mo, \$1,620\/yr/);
+  assert.match(foodMove.insight, /takeout is \$335\/mo versus \$100\/mo/);
   assert.doesNotMatch(foodMove.text, /move .* groceries/i);
   assert.doesNotMatch(foodMove.text, /Set takeout/i);
   assert.doesNotMatch(foodMove.text, /bring .*closer/i);
   assert.doesNotMatch(foodMove.text, /closer to .*range/i);
-  assert.match(foodMove.text, /Impact: \$135\/mo, \$1,620\/yr\./);
+  assert.match(foodMove.insight, /Impact: \$135\/mo, \$1,620\/yr\./);
   assert.equal(result.monthlySavings, 135);
   assert.equal(result.annualWaste, 1620);
 });
@@ -315,6 +340,25 @@ test("debt pressure is scored separately and creates long-term debt action", () 
       /consolidation|refinance/i.test(move.text),
     ),
   );
+});
+
+test("long term opportunities exclude income and job advice", () => {
+  const result = computeTotals(
+    payload(4500, {
+      Housing: [item("Rent", 2100)],
+      Utilities: [item("Utilities", 300)],
+      Food: [item("Groceries", 800)],
+      Transportation: [item("Fuel", 350)],
+    }),
+  );
+
+  const allLongTermText = result.longTermOpportunities
+    .map((move) => move.text)
+    .join(" ");
+  assert.doesNotMatch(allLongTermText, /better-paying|higher-paying|raise|promotion|income growth|get a better job/i);
+  result.longTermOpportunities.forEach((move) => {
+    assert.match(move.text, /housing|vehicle|debt|consolidation|refinance|recurring|subscriptions|misc|food/i);
+  });
 });
 
 test("normal expensive housing is only a low-weight warning without ZIP context", () => {

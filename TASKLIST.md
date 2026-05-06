@@ -1,29 +1,47 @@
-# IMAN Task List
+# IMAN Task List V2
 
-## Active Sprint
-1. Improve recommendation realism to max 2 to 3 useful actions
-2. Fix duplicate subscription wording without naming specific service
-3. Make investment slider update results live
-4. Improve financial score explanation UI
-5. Redesign score logic to measure waste instead of necessary living spend
-6. Add ZIP code input for local housing and cost comparisons
-7. Add debt category helper subtitle for monthly payment only
-8. Build monthly tracker with daily manual expense entries
+## 🔴 Active Sprint (UI + Clarity)
+- [ ] Finalize Financial Score Explanation (clarity + trust)
+- [ ] UI polish for clean vs optimization modes (spacing, labels, hierarchy)
+- [ ] Auto-focus input when selecting sub-category
+- [ ] Improve input validation UX
+- [ ] Improve visual clarity of "Monthly Surplus" / "Available to Invest"
 
-## After Active Sprint
-1. Explain recommendation targets
-2. Replace accordion arrows with custom chevrons
-3. Improve input validation UX
-4. Receipt scan OCR prototype
-5. Better charts and trends
-6. What If simulator
-7. Goal based planning
+## 🟡 Next Sprint (Retention + Usage)
+- [ ] Build Quick Add Expense (manual daily logging)
+- [ ] Track actual vs planned spending per category
+- [ ] Add simple weekly summary card
+- [ ] Add “Analyze actual spending” flow
+- [ ] Add on-track / over / under indicators
 
-## Completed
-- Local project recovered
-- GitHub backup complete
-- Domain connected
-- Business email working
-- Dark UI restored
-- Core analysis flow working
+## 🟢 Product Expansion
+- [ ] Explain recommendation targets (refinement)
+- [ ] Replace accordion arrows with custom chevrons
+- [ ] Better charts and trends (only if needed)
+- [ ] What If simulator
+- [ ] Goal based planning
 
+## 🔵 Future / Advanced
+- [ ] Receipt OCR
+- [ ] Bank integration
+- [ ] Credit optimization system
+- [ ] ZIP code input for local housing and cost comparisons
+
+## ✅ Completed (Updated)
+- [x] Core analysis engine working
+- [x] Recommendation intelligence system
+- [x] Score logic redesigned (waste-based)
+- [x] Dynamic investment calculation
+- [x] UI mode switching (clean vs optimization)
+- [x] Plausibility + confidence system
+- [x] Financial score explanation (core implemented)
+
+## Historical Context
+- [x] Local project recovered
+- [x] GitHub backup complete
+- [x] Domain connected
+- [x] Business email working
+- [x] Dark UI restored
+- [x] Core analysis flow working
+- [x] Duplicate subscription wording cleaned up
+- [x] Debt category helper clarified as monthly payment only

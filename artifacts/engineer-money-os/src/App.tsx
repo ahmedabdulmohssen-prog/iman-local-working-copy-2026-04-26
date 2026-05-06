@@ -1,9 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import imanWordmark from "./Assets/iman-wordmark.png";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3001";
 
 type Item = { name: string; amount: string };
+type Expense = {
+  id: string;
+  amount: number;
+  category: CategoryName;
+  note?: string;
+  date: string;
+};
+type ActiveTab = "analysis" | "tracker";
 
 type RecommendedAction = { text: string; savings: number | null };
 type Difficulty = "Easy" | "Medium" | "Hard";
@@ -11,6 +19,8 @@ type Priority = {
   text: string;
   monthlyImpact: number | null;
   difficulty: Difficulty;
+  insight?: string;
+  key?: string;
 };
 type AnalysisConfidence = "High" | "Medium" | "Low";
 type InputCompleteness = {
@@ -33,6 +43,13 @@ type PlausibilityCheck = {
   reasons: string[];
 };
 
+type ScoreBreakdownItem = {
+  name: string;
+  points: number;
+  max: number;
+  explanation: string;
+};
+
 type AnalyzeResponse = {
   netCashFlow: number;
   weeklySafeSpend: number;
@@ -51,18 +68,8 @@ type AnalyzeResponse = {
   inputCompletenessPrompt?: string;
   plausibilityCheck?: PlausibilityCheck;
   plausibilityNote?: string | null;
-  scoreBreakdown?: {
-    name: string;
-    points: number;
-    max: number;
-    explanation: string;
-  }[];
-  weakestCategory?: {
-    name: string;
-    points: number;
-    max: number;
-    explanation: string;
-  };
+  scoreBreakdown?: ScoreBreakdownItem[];
+  weakestCategory?: ScoreBreakdownItem;
   isDeficit?: boolean;
   annualWaste: number;
   monthlySavings: number;
@@ -145,6 +152,7 @@ const LOW_PRIORITY_CATEGORIES: ReadonlySet<CategoryName> = new Set([
   "Subscriptions",
   "Misc",
 ]);
+const EXPENSE_STORAGE_KEY = "iman.monthlyTracker.expenses.v1";
 
 function buildDefaultCategories(): Record<CategoryName, Item[]> {
   // Start every category with NO rows. Defaults appear as suggestion chips
@@ -156,7 +164,68 @@ function buildDefaultCategories(): Record<CategoryName, Item[]> {
   return out;
 }
 
+function todayInputValue() {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${today.getFullYear()}-${month}-${day}`;
+}
+
+function isCategoryName(value: unknown): value is CategoryName {
+  return typeof value === "string" && CATEGORY_NAMES.includes(value as CategoryName);
+}
+
+function loadStoredExpenses(): Expense[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(EXPENSE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((expense) => {
+        const amount = Number(expense?.amount);
+        return (
+          typeof expense?.id === "string" &&
+          Number.isFinite(amount) &&
+          amount > 0 &&
+          isCategoryName(expense?.category) &&
+          typeof expense?.date === "string"
+        );
+      })
+      .map((expense) => ({
+        id: expense.id,
+        amount: Number(expense.amount),
+        category: expense.category,
+        note: typeof expense.note === "string" ? expense.note : "",
+        date: expense.date,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function isCurrentMonthExpense(expense: Expense) {
+  const [year, month] = expense.date.split("-").map(Number);
+  const now = new Date();
+  return year === now.getFullYear() && month === now.getMonth() + 1;
+}
+
+function buildCategoriesFromExpenses(expenses: Expense[]) {
+  const next = buildDefaultCategories();
+  for (const name of CATEGORY_NAMES) {
+    const total = expenses
+      .filter((expense) => expense.category === name)
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    if (total > 0) {
+      next[name] = [{ name: "Actual spending", amount: String(Math.round(total)) }];
+    }
+  }
+  return next;
+}
+
 function App() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>("analysis");
   const [income, setIncome] = useState("");
   const [creditScoreRange, setCreditScoreRange] = useState("740–799");
   const [categories, setCategories] = useState<Record<CategoryName, Item[]>>(
@@ -170,6 +239,11 @@ function App() {
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>(loadStoredExpenses);
+
+  useEffect(() => {
+    window.localStorage.setItem(EXPENSE_STORAGE_KEY, JSON.stringify(expenses));
+  }, [expenses]);
 
   const setCategoryItems = (name: CategoryName, items: Item[]) =>
     setCategories((prev) => ({ ...prev, [name]: items }));
@@ -194,8 +268,9 @@ function App() {
       }))
       .filter((it) => it.name !== "" && it.amount > 0); // drop empty/zero entries
 
-  const onAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const runAnalysis = async (
+    categorySource: Record<CategoryName, Item[]> = categories,
+  ) => {
     setError(null);
     setResult(null);
 
@@ -208,7 +283,7 @@ function App() {
     const payloadCategories = {} as Record<CategoryName, { name: string; amount: number }[]>;
     let anyExpense = false;
     for (const name of CATEGORY_NAMES) {
-      const cleaned = toPayloadItems(categories[name]);
+      const cleaned = toPayloadItems(categorySource[name]);
       payloadCategories[name] = cleaned;
       if (cleaned.length > 0) anyExpense = true;
     }
@@ -279,17 +354,53 @@ function App() {
     }
   };
 
+  const onAnalyze = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await runAnalysis();
+  };
+
+  const analyzeWithActualSpending = async () => {
+    const currentMonthExpenses = expenses.filter(isCurrentMonthExpense);
+    const actualCategories = buildCategoriesFromExpenses(currentMonthExpenses);
+    setCategories(actualCategories);
+    setExpanded(new Set<CategoryName>(CATEGORY_NAMES));
+    setActiveTab("analysis");
+    await runAnalysis(actualCategories);
+  };
+
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-[#0a0a0b] text-zinc-100 antialiased selection:bg-blue-500/30">
+    <div
+      className="relative isolate min-h-screen w-full overflow-x-hidden text-zinc-100 antialiased selection:bg-blue-500/30"
+      style={{
+        background: "radial-gradient(circle at top, #0b0f1a, #000000)",
+      }}
+    >
       <div
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
           background:
-            "radial-gradient(60rem 60rem at 80% -20%, rgba(59,130,246,0.06), transparent 60%), radial-gradient(50rem 50rem at -10% 10%, rgba(59,130,246,0.04), transparent 60%)",
+            "radial-gradient(42rem 42rem at 8% 4%, rgba(0,120,255,0.08), transparent 62%), radial-gradient(38rem 38rem at 96% 2%, rgba(0,120,255,0.06), transparent 64%), radial-gradient(34rem 34rem at 92% 94%, rgba(0,120,255,0.05), transparent 66%)",
         }}
       />
+      <svg
+        className="pointer-events-none fixed inset-0 -z-10 h-full w-full opacity-[0.06] blur-[1.5px]"
+        viewBox="0 0 1440 1000"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <g fill="none" stroke="rgba(125, 180, 255, 0.72)" strokeWidth="1.5">
+          <path d="M80 760 C260 700 320 560 500 590 S780 690 920 540 1170 360 1360 410" />
+          <path d="M120 860 C310 815 460 760 640 800 S960 910 1280 740" />
+        </g>
+        <g fill="rgba(125, 180, 255, 0.42)">
+          <circle cx="1180" cy="180" r="72" />
+          <circle cx="1290" cy="300" r="34" />
+          <circle cx="150" cy="250" r="48" />
+          <circle cx="250" cy="150" r="22" />
+        </g>
+      </svg>
 
-<div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+<div className="relative z-10 max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-6 pb-24 sm:py-8 sm:pb-28 lg:py-12">
   <header className="flex items-center justify-between mb-6 sm:mb-10 gap-3">
     <div className="flex items-center min-w-0">
       <img
@@ -305,6 +416,7 @@ function App() {
     </div>
   </header>
 
+        {activeTab === "analysis" ? (
         <div className="flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-5 sm:gap-6 lg:gap-8 lg:items-start min-w-0">
           <aside className="min-w-0 lg:sticky lg:top-8">
             <form
@@ -496,7 +608,372 @@ function App() {
             {result && <Results data={result} />}
           </main>
         </div>
+        ) : (
+          <TrackerScreen
+            expenses={expenses}
+            setExpenses={setExpenses}
+            categories={categories}
+            result={result}
+            income={Number(income) || 0}
+            onAnalyzeWithActuals={analyzeWithActualSpending}
+            loading={loading}
+          />
+        )}
       </div>
+      <BottomTabs activeTab={activeTab} onChange={setActiveTab} />
+    </div>
+  );
+}
+
+function BottomTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: ActiveTab;
+  onChange: (tab: ActiveTab) => void;
+}) {
+  const tabs: { id: ActiveTab; label: string }[] = [
+    { id: "analysis", label: "Analysis" },
+    { id: "tracker", label: "Tracker" },
+  ];
+
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-800/80 bg-black/88 backdrop-blur-xl px-3 py-3">
+      <div className="mx-auto grid max-w-md grid-cols-2 gap-2 rounded-2xl border border-zinc-800/80 bg-zinc-950/85 p-1.5 shadow-2xl shadow-black/40">
+        {tabs.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onChange(tab.id)}
+              className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                active
+                  ? "bg-blue-500 text-zinc-950 shadow-lg shadow-blue-500/15"
+                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function TrackerScreen({
+  expenses,
+  setExpenses,
+  categories,
+  result,
+  income,
+  onAnalyzeWithActuals,
+  loading,
+}: {
+  expenses: Expense[];
+  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
+  categories: Record<CategoryName, Item[]>;
+  result: AnalyzeResponse | null;
+  income: number;
+  onAnalyzeWithActuals: () => Promise<void>;
+  loading: boolean;
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [lastCategory, setLastCategory] = useState<CategoryName>("Food");
+  const currentMonthExpenses = useMemo(
+    () => expenses.filter(isCurrentMonthExpense),
+    [expenses],
+  );
+  const plannedTotals = useMemo(() => {
+    const totals = {} as Record<CategoryName, number>;
+    for (const name of CATEGORY_NAMES) {
+      totals[name] = categories[name].reduce((sum, item) => {
+        const amount = Number(item.amount);
+        return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+      }, 0);
+    }
+    return totals;
+  }, [categories]);
+  const actualTotals = useMemo(() => {
+    const totals = {} as Record<CategoryName, number>;
+    for (const name of CATEGORY_NAMES) totals[name] = 0;
+    for (const expense of currentMonthExpenses) {
+      totals[expense.category] += expense.amount;
+    }
+    return totals;
+  }, [currentMonthExpenses]);
+  const plannedSpend = CATEGORY_NAMES.reduce(
+    (sum, name) => sum + plannedTotals[name],
+    0,
+  );
+  const totalSpent = currentMonthExpenses.reduce(
+    (sum, expense) => sum + expense.amount,
+    0,
+  );
+  const plannedNetCashFlow =
+    result?.netCashFlow ?? (income > 0 ? income - plannedSpend : 0);
+  const remaining = plannedNetCashFlow - totalSpent;
+
+  const addExpense = (expense: Omit<Expense, "id">) => {
+    setLastCategory(expense.category);
+    setExpenses((prev) => [
+      {
+        ...expense,
+        id:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      },
+      ...prev,
+    ]);
+    setIsAdding(false);
+  };
+
+  return (
+    <main className="relative min-h-[70vh] pb-20">
+      <div className="space-y-4 sm:space-y-5">
+        <Card title="This Month" eyebrow="Tracker">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Subtile
+              label="Total Spent"
+              value={`$${Math.round(totalSpent).toLocaleString()}`}
+              accent="blue"
+            />
+            <Subtile
+              label={remaining >= 0 ? "Remaining" : "Over"}
+              value={`$${Math.abs(Math.round(remaining)).toLocaleString()}`}
+              accent={remaining >= 0 ? "green" : "red"}
+            />
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={onAnalyzeWithActuals}
+              disabled={loading || currentMonthExpenses.length === 0}
+              className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-zinc-950 shadow-lg shadow-blue-600/15 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Analyzing..." : "Analyze with actual spending"}
+            </button>
+            <button
+              type="button"
+              disabled
+              className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm font-semibold text-zinc-500 opacity-45"
+            >
+              Scan receipt (coming soon)
+            </button>
+          </div>
+        </Card>
+
+        <Card title="Category Breakdown" eyebrow="Plan vs actual">
+          <div className="space-y-2.5">
+            {CATEGORY_NAMES.map((name) => {
+              const planned = plannedTotals[name];
+              const actual = actualTotals[name];
+              const over = actual > planned;
+              const delta = Math.round(actual - planned);
+              return (
+                <div
+                  key={name}
+                  className="rounded-xl border border-zinc-800/80 bg-zinc-950/55 p-3.5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-zinc-100">
+                        {name}
+                      </div>
+                      <div className="mt-1 text-xs text-zinc-500 tabular-nums">
+                        Planned ${Math.round(planned).toLocaleString()} · Actual $
+                        {Math.round(actual).toLocaleString()}
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wider ${
+                        over
+                          ? "border-rose-500/30 bg-rose-500/12 text-rose-200"
+                          : "border-emerald-500/24 bg-emerald-500/12 text-emerald-200"
+                      }`}
+                    >
+                      {over ? `Over (+$${delta.toLocaleString()})` : "On Track"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        {currentMonthExpenses.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-10 text-center">
+            <div className="text-zinc-200 font-medium">No expenses yet</div>
+            <div className="mt-1 text-sm text-zinc-500">
+              Start by adding your first expense.
+            </div>
+          </div>
+        ) : (
+          <Card title="Recent Expenses" eyebrow="This month">
+            <div className="space-y-2.5">
+              {currentMonthExpenses.slice(0, 8).map((expense) => (
+                <div
+                  key={expense.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/80 bg-zinc-950/55 px-3.5 py-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-zinc-100">
+                      {expense.category}
+                    </div>
+                    <div className="truncate text-xs text-zinc-500">
+                      {expense.note || expense.date}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-sm font-semibold tabular-nums text-zinc-100">
+                    ${Math.round(expense.amount).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setIsAdding(true)}
+        className="fixed bottom-24 right-4 z-20 rounded-full bg-blue-500 px-5 py-3 text-sm font-bold text-zinc-950 shadow-2xl shadow-blue-500/20 transition hover:bg-blue-400"
+      >
+        + Add Expense
+      </button>
+
+      {isAdding && (
+        <AddExpenseSheet
+          defaultCategory={lastCategory}
+          onClose={() => setIsAdding(false)}
+          onAdd={addExpense}
+        />
+      )}
+    </main>
+  );
+}
+
+function AddExpenseSheet({
+  defaultCategory,
+  onClose,
+  onAdd,
+}: {
+  defaultCategory: CategoryName;
+  onClose: () => void;
+  onAdd: (expense: Omit<Expense, "id">) => void;
+}) {
+  const amountRef = useRef<HTMLInputElement | null>(null);
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState<CategoryName>(defaultCategory);
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    amountRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
+    onAdd({
+      amount: parsedAmount,
+      category,
+      note: note.trim(),
+      date: todayInputValue(),
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end bg-black/60 px-3 pb-3 backdrop-blur-sm sm:items-center sm:justify-center">
+      <button
+        type="button"
+        aria-label="Close add expense"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+      />
+      <form
+        onSubmit={submit}
+        className="relative w-full max-w-md rounded-2xl border border-zinc-700/80 bg-zinc-950 p-4 shadow-2xl shadow-black/50"
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-zinc-100">
+              Add Expense
+            </div>
+            <div className="text-xs text-zinc-500">Today · quick entry</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 w-9 rounded-lg text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-100"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-zinc-500">
+              Amount
+            </span>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-sm">
+                $
+              </span>
+              <input
+                ref={amountRef}
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="24"
+                className="w-full rounded-xl border border-zinc-800 bg-black pl-7 pr-3 py-3 text-lg font-semibold tabular-nums text-zinc-100 placeholder-zinc-700 transition focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-zinc-500">
+              Category
+            </span>
+            <select
+              value={category}
+              onChange={(event) => setCategory(event.target.value as CategoryName)}
+              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-3 text-sm text-zinc-100 transition focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              {CATEGORY_NAMES.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-zinc-500">
+              Note
+            </span>
+            <input
+              type="text"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Optional"
+              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-3 text-sm text-zinc-100 placeholder-zinc-700 transition focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          className="mt-4 w-full rounded-xl bg-blue-500 py-3 text-sm font-bold text-zinc-950 shadow-lg shadow-blue-500/15 transition hover:bg-blue-400"
+        >
+          Add Expense
+        </button>
+      </form>
     </div>
   );
 }
@@ -536,13 +1013,13 @@ function Results({ data }: { data: AnalyzeResponse }) {
   const annualWaste = num(data.annualWaste);
   const monthlySavings = num(data.monthlySavings);
   const projectedNetCashFlow = num(data.projectedNetCashFlow);
-  const investAmount = num(data.investAmount);
-  const investPct = num(data.investPct);
-  const fv5 = num(data.fv5);
-  const fv10 = num(data.fv10);
-  const fv20 = num(data.fv20);
+  const initialInvestPct = Math.min(100, Math.max(0, num(data.investPct)));
+  const [investPct, setInvestPct] = useState(initialInvestPct);
   const opportunities = Array.isArray(data.optimizationOpportunities)
     ? data.optimizationOpportunities
+    : [];
+  const scoreBreakdown = Array.isArray(data.scoreBreakdown)
+    ? data.scoreBreakdown
     : [];
   const shortTerm: Priority[] = Array.isArray(data.shortTermPriorities)
     ? data.shortTermPriorities
@@ -556,16 +1033,63 @@ function Results({ data }: { data: AnalyzeResponse }) {
   const isDeficit = data.isDeficit === true || netCashFlow < 0;
   const insightsLoading = data.insightsLoading === true;
   const inputCompleteness = data.inputCompleteness;
+  const minimalSavingsThreshold = 100;
+  const validationPriority = shortTerm.find(
+    (move) =>
+      move.monthlyImpact == null &&
+      /strong position|spending is balanced|surplus/i.test(move.text),
+  );
+  const allocationMode =
+    !isDeficit &&
+    monthlySavings < minimalSavingsThreshold &&
+    netCashFlow >= 1000 &&
+    validationPriority != null;
+  const meaningfulSavings = monthlySavings >= minimalSavingsThreshold;
+  const displayedShortTerm = allocationMode
+    ? validationPriority
+      ? [validationPriority]
+      : []
+    : shortTerm;
+  const showOptimizationSections = !allocationMode && meaningfulSavings;
+  const investmentProjection = useMemo(() => {
+    const monthlyContribution = isDeficit
+      ? 0
+      : Math.round(Math.max(0, netCashFlow) * (investPct / 100));
+    const futureValue = (years: number) => {
+      const r = 0.07 / 12;
+      const months = years * 12;
+      return monthlyContribution > 0
+        ? Math.round((monthlyContribution * (Math.pow(1 + r, months) - 1)) / r)
+        : 0;
+    };
+    return {
+      monthlyContribution,
+      fv5: futureValue(5),
+      fv10: futureValue(10),
+      fv20: futureValue(20),
+    };
+  }, [investPct, isDeficit, netCashFlow]);
+  const fv5 = investmentProjection.fv5;
+  const fv10 = investmentProjection.fv10;
+  const fv20 = investmentProjection.fv20;
   const plausibilityNote =
     data.plausibilityCheck?.triggered === true
       ? data.plausibilityNote ?? data.plausibilityCheck.note ?? ""
       : "";
-  const trustedAdvisorNote = [plausibilityNote, advisorNote]
+  const allocationNote =
+    allocationMode
+      ? "You're generating strong monthly surplus. Focus on allocating it efficiently rather than cutting expenses."
+      : "";
+  const trustedAdvisorNote = [plausibilityNote, allocationNote, advisorNote]
     .filter(Boolean)
     .join(" ");
 
+  useEffect(() => {
+    setInvestPct(initialInvestPct);
+  }, [initialInvestPct]);
+
   return (
-    <section className="space-y-5">
+    <section className="space-y-6 sm:space-y-7">
       {isDeficit && <DeficitBanner />}
 
       <ScoreCard
@@ -574,6 +1098,14 @@ function Results({ data }: { data: AnalyzeResponse }) {
         weakest={weakestCategory}
         completeness={inputCompleteness}
       />
+
+      {scoreBreakdown.length > 0 && (
+        <ScoreExplanationCard
+          breakdown={scoreBreakdown}
+          priorities={shortTerm}
+          monthlySavings={monthlySavings}
+        />
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard
@@ -589,79 +1121,91 @@ function Results({ data }: { data: AnalyzeResponse }) {
           suffix="/wk"
           hint="net ÷ 4"
         />
-        <StatCard
-          label="Potential Savings Opportunity"
-          value={annualWaste}
-          tone="warning"
-          hint="Estimated annualized amount you can recover by closing your spending gap"
-        />
+        {allocationMode ? (
+          <StatCard
+            label="Monthly Surplus"
+            value={netCashFlow}
+            tone="positive"
+            hint="available cash flow to allocate"
+          />
+        ) : (
+          <StatCard
+            label="Potential Savings Opportunity"
+            value={annualWaste}
+            tone="positive"
+            hint="Estimated annualized amount you can recover by closing your spending gap"
+          />
+        )}
       </div>
 
-      {(insightsLoading ||
+      {showOptimizationSections &&
+        (insightsLoading ||
         opportunities.length > 0 ||
-        shortTerm.length > 0 ||
+        displayedShortTerm.length > 0 ||
         longTerm.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-          <Card title="Optimization Opportunities" eyebrow="Insights">
-            {insightsLoading && opportunities.length === 0 ? (
-              <InsightSkeleton lines={3} />
-            ) : (
-              <ul className="space-y-3.5 text-sm text-zinc-200">
-                {opportunities.map((line, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="mt-2 shrink-0 w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-                    <span className="leading-relaxed">{line}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+          {(insightsLoading || opportunities.length > 0) && (
+            <Card title="Optimization Opportunities" eyebrow="Insights">
+              {insightsLoading && opportunities.length === 0 ? (
+                <InsightSkeleton lines={3} />
+              ) : (
+                <ul className="space-y-3.5 text-sm text-zinc-200">
+                  {opportunities.map((line, i) => (
+                    <li key={i} className="flex gap-3">
+                      <span className="mt-2 shrink-0 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.45)]" />
+                      <span className="leading-relaxed">{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
 
           <div className="space-y-4 sm:space-y-5">
-            <Card title="Short Term Priorities" eyebrow="0–90 days">
-              {shortTerm.length === 0 ? (
-                <p className="text-sm text-zinc-500">
-                  No immediate moves needed — your near-term spending looks lean.
-                </p>
-              ) : (
-                <PriorityList items={shortTerm} />
-              )}
-            </Card>
+            {displayedShortTerm.length > 0 && (
+              <Card title="Short Term Priorities" eyebrow="0–90 days">
+                <PriorityList items={displayedShortTerm} />
+              </Card>
+            )}
 
-            <Card title="Long Term Opportunities" eyebrow="3–12 months">
-              {longTerm.length === 0 ? (
-                <p className="text-sm text-zinc-500">
-                  No major strategic shifts needed — your fixed costs are in range.
-                </p>
-              ) : (
+            {longTerm.length > 0 && (
+              <Card title="Long Term Opportunities" eyebrow="3–12 months">
                 <PriorityList items={longTerm} />
-              )}
-            </Card>
+              </Card>
+            )}
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-        <Card title="Savings Impact" eyebrow="Cash">
-          <div className="grid grid-cols-2 gap-3">
-            <Subtile
-              label="Monthly"
-              value={`$${monthlySavings.toLocaleString()}`}
-              accent="blue"
-            />
-            <Subtile
-              label="Yearly"
-              value={`$${annualWaste.toLocaleString()}`}
-              accent="blue"
-            />
-          </div>
+      {allocationMode && displayedShortTerm.length > 0 && (
+        <Card title="Short Term Priorities" eyebrow="Allocation">
+          <PriorityList items={displayedShortTerm} />
         </Card>
+      )}
 
-        <AfterOptimizationCard
-          before={netCashFlow}
-          after={projectedNetCashFlow}
-        />
-      </div>
+      {showOptimizationSections && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+          <Card title="Savings Impact" eyebrow="Cash">
+            <div className="grid grid-cols-2 gap-3">
+              <Subtile
+                label="Monthly"
+                value={`$${monthlySavings.toLocaleString()}`}
+                accent="green"
+              />
+              <Subtile
+                label="Yearly"
+                value={`$${annualWaste.toLocaleString()}`}
+                accent="green"
+              />
+            </div>
+          </Card>
+
+          <AfterOptimizationCard
+            before={netCashFlow}
+            after={projectedNetCashFlow}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:gap-5">
         <Card title="Investment Plan" eyebrow="Allocation">
@@ -684,26 +1228,32 @@ function Results({ data }: { data: AnalyzeResponse }) {
               <div className="flex items-end justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <div className="text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-1">
-                    Monthly contribution
+                    Available to invest
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold text-blue-500 tabular-nums break-words">
-                    ${investAmount.toLocaleString()}
+                  <div className="text-xl sm:text-2xl font-bold text-emerald-400 tabular-nums break-words">
+                    ${investmentProjection.monthlyContribution.toLocaleString()}
                     <span className="text-sm text-zinc-500 font-normal">/mo</span>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-1">
-                    Of savings
+                    Of surplus
                   </div>
                   <div className="text-base sm:text-lg font-semibold text-zinc-200 tabular-nums">
                     {investPct}%
                   </div>
                 </div>
               </div>
-              <div className="mt-3 h-1.5 bg-zinc-800/80 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-blue-300"
-                  style={{ width: `${Math.min(100, Math.max(0, investPct))}%` }}
+              <div className="mt-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={investPct}
+                  onChange={(e) => setInvestPct(Number(e.target.value))}
+                  className="w-full credit-score-slider"
+                  aria-label="Investment allocation percentage"
                 />
               </div>
               <div className="text-sm sm:text-[11px] text-zinc-500 mt-2">Assumes 7% annual return.</div>
@@ -951,7 +1501,7 @@ function ScoreCard({
 }: {
   score: number;
   label: string;
-  weakest?: { name: string; points: number; max: number; explanation: string };
+  weakest?: ScoreBreakdownItem;
   completeness?: InputCompleteness;
 }) {
   const [displayScore, setDisplayScore] = useState(0);
@@ -1039,6 +1589,230 @@ function ScoreCard({
         )}
       </div>
     </div>
+  );
+}
+
+function scoreRatio(item: ScoreBreakdownItem) {
+  return item.max > 0 ? item.points / item.max : 0;
+}
+
+function componentLevel(
+  item: ScoreBreakdownItem | undefined,
+  mode: "strength" | "pressure",
+) {
+  if (!item) return "Low";
+  const ratio = scoreRatio(item);
+  if (mode === "strength") {
+    if (ratio >= 0.8) return "High";
+    if (ratio >= 0.5) return "Medium";
+    return "Low";
+  }
+  if (ratio >= 0.8) return "Low";
+  if (ratio >= 0.5) return "Medium";
+  return "High";
+}
+
+function componentTone(level: string, mode: "strength" | "pressure") {
+  const good =
+    (mode === "strength" && level === "High") ||
+    (mode === "pressure" && level === "Low");
+  const rough =
+    (mode === "strength" && level === "Low") ||
+    (mode === "pressure" && level === "High");
+  if (good) return "border-blue-500/18 bg-blue-500/10 text-blue-200";
+  if (rough) return "border-amber-500/25 bg-amber-500/10 text-amber-200";
+  return "border-zinc-700/80 bg-zinc-900/70 text-zinc-200";
+}
+
+function recommendationScoreArea(text: string) {
+  if (/takeout|food|misc|service|personal|utility|subscription/i.test(text)) {
+    return "Controllable Waste";
+  }
+  if (/debt|consolidation|refinance|payment relief/i.test(text)) {
+    return "Debt Burden";
+  }
+  if (/surplus|savings|invest/i.test(text)) {
+    return "Cash Retention";
+  }
+  return "Cash Retention";
+}
+
+function buildScoreMoves(
+  priorities: Priority[],
+  breakdown: ScoreBreakdownItem[],
+  monthlySavings: number,
+) {
+  const byName = new Map(breakdown.map((item) => [item.name, item]));
+  const seen = new Set<string>();
+  const moves = priorities
+    .filter((priority) => priority.monthlyImpact == null || priority.monthlyImpact > 0)
+    .map((priority) => {
+      const areaName = recommendationScoreArea(priority.text);
+      const area = byName.get(areaName);
+      const gap = area ? Math.max(0, area.max - area.points) : 0;
+      const impact = typeof priority.monthlyImpact === "number" ? priority.monthlyImpact : monthlySavings;
+      const estimate = Math.max(1, Math.min(8, Math.ceil(gap * 0.45 || impact / 250)));
+      const cleaned = priority.text.split(" Why it matters:")[0].replace(/\.$/, "");
+      return {
+        areaName,
+        text: cleaned,
+        estimate,
+      };
+    })
+    .filter((move) => {
+      if (seen.has(move.areaName)) return false;
+      seen.add(move.areaName);
+      return move.estimate > 0;
+    })
+    .slice(0, 3);
+
+  if (moves.length > 0) return moves;
+
+  return [...breakdown]
+    .filter((item) => item.points < item.max)
+    .sort((a, b) => b.max - b.points - (a.max - a.points))
+    .slice(0, 2)
+    .map((item) => ({
+      areaName: item.name,
+      text: `Improve ${item.name.toLowerCase()}`,
+      estimate: Math.max(1, Math.min(6, Math.ceil((item.max - item.points) * 0.4))),
+    }));
+}
+
+function ScoreExplanationCard({
+  breakdown,
+  priorities,
+  monthlySavings,
+}: {
+  breakdown: ScoreBreakdownItem[];
+  priorities: Priority[];
+  monthlySavings: number;
+}) {
+  const findPart = (name: string) =>
+    breakdown.find((item) => item.name.toLowerCase() === name.toLowerCase());
+  const positives = breakdown
+    .filter((item) => scoreRatio(item) >= 0.85)
+    .sort((a, b) => b.points - a.points);
+  const negatives = breakdown
+    .filter((item) => scoreRatio(item) < 0.85)
+    .sort((a, b) => b.max - b.points - (a.max - a.points));
+  const topDrivers = [
+    ...negatives.slice(0, 2),
+    ...positives.slice(0, Math.max(0, 3 - Math.min(2, negatives.length))),
+  ].slice(0, 3);
+  const componentParts = [
+    { label: "Cash retention", item: findPart("Cash Retention"), mode: "strength" as const },
+    { label: "Waste ratio", item: findPart("Controllable Waste"), mode: "pressure" as const },
+    { label: "Debt burden", item: findPart("Debt Burden"), mode: "pressure" as const },
+    { label: "Subscriptions", item: findPart("Subscription Bloat"), mode: "pressure" as const },
+  ];
+  const moves = buildScoreMoves(priorities, breakdown, monthlySavings);
+
+  return (
+    <Card title="Why This Score?" eyebrow="Score logic">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5">
+        <div className="space-y-5">
+          <div>
+            <div className="text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-3">
+              Top Drivers
+            </div>
+            <ul className="space-y-2.5">
+              {topDrivers.map((item) => {
+                const positive = scoreRatio(item) >= 0.85;
+                return (
+                  <li
+                    key={item.name}
+                    className="rounded-xl border border-zinc-800/70 bg-zinc-950/45 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-zinc-100">
+                        {item.name}
+                      </div>
+                      <span
+                        className={`shrink-0 text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                          positive
+                            ? "border-blue-500/18 bg-blue-500/10 text-blue-200"
+                            : "border-amber-500/25 bg-amber-500/10 text-amber-200"
+                        }`}
+                      >
+                        {positive ? "Positive" : "Drag"}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500 tabular-nums">
+                      {item.points}/{item.max} pts
+                    </div>
+                    <p className="mt-2 text-sm text-zinc-300 leading-relaxed">
+                      {item.explanation}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {moves.length > 0 && (
+            <div>
+              <div className="text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-3">
+                What Moves Your Score
+              </div>
+              <ul className="space-y-2.5">
+                {moves.map((move, index) => (
+                  <li
+                    key={`${move.areaName}-${index}`}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-950/45 p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm text-zinc-200 leading-relaxed">
+                        {move.text}
+                      </div>
+                      <div className="mt-1 text-xs text-zinc-500">
+                        Affects {move.areaName}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-blue-200 bg-blue-500/10 border border-blue-500/18 px-2 py-0.5 rounded-md tabular-nums whitespace-nowrap">
+                      up to +{move.estimate}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className="text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-3">
+            Component Breakdown
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5">
+            {componentParts.map(({ label, item, mode }) => {
+              const level = componentLevel(item, mode);
+              return (
+                <div
+                  key={label}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-950/45 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-zinc-200">
+                      {label}
+                    </div>
+                    {item && (
+                      <div className="text-xs text-zinc-500 tabular-nums">
+                        {item.points}/{item.max} pts
+                      </div>
+                    )}
+                  </div>
+                  <span
+                    className={`shrink-0 text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${componentTone(level, mode)}`}
+                  >
+                    {level}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -1139,7 +1913,7 @@ function StatCard({
       : tone === "warning"
         ? "text-orange-400"
         : tone === "positive"
-          ? "text-blue-400"
+          ? "text-emerald-400"
           : "text-rose-400";
   const arrowColor =
     tone === "neutral"
@@ -1147,7 +1921,7 @@ function StatCard({
       : tone === "warning"
         ? "text-orange-400"
         : tone === "positive"
-          ? "text-blue-400"
+          ? "text-emerald-400"
           : "text-rose-400";
   const arrow =
     tone === "neutral"
@@ -1158,12 +1932,12 @@ function StatCard({
           ? "↑"
           : "↓";
   return (
-    <div className="min-w-0 bg-zinc-900/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-700 hover:shadow-black/30 transition">
+    <div className="min-w-0 bg-zinc-900/75 border border-zinc-700/70 rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-600 hover:shadow-black/30 transition">
       <div className="flex items-center justify-between mb-2 gap-2">
         <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.18em] text-zinc-400 truncate font-medium">{label}</div>
         <span className={`shrink-0 text-sm font-bold ${arrowColor}`}>{arrow}</span>
       </div>
-      <div className={`text-2xl sm:text-3xl font-bold tabular-nums break-words ${valueColor}`}>
+      <div className={`text-2xl sm:text-3xl font-bold tabular-nums break-words text-right sm:text-left ${valueColor}`}>
         ${value.toLocaleString()}
         {suffix && <span className="text-xs text-zinc-500 font-normal ml-0.5">{suffix}</span>}
       </div>
@@ -1185,7 +1959,7 @@ function Card({
 }) {
   return (
     <div
-      className={`min-w-0 bg-zinc-900/70 border ${accent ? "border-blue-500/18" : "border-zinc-800"} rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-700 hover:shadow-black/30 transition`}
+      className={`min-w-0 bg-zinc-900/75 border ${accent ? "border-blue-500/18" : "border-zinc-700/70"} rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-600 hover:shadow-black/30 transition`}
     >
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm font-semibold text-zinc-100">{title}</div>
@@ -1205,13 +1979,20 @@ function Subtile({
 }: {
   label: string;
   value: string;
-  accent?: "blue";
+  accent?: "blue" | "green" | "red";
 }) {
-  const valueColor = accent === "blue" ? "text-blue-500" : "text-zinc-100";
+  const valueColor =
+    accent === "green"
+      ? "text-emerald-400"
+      : accent === "red"
+        ? "text-rose-400"
+      : accent === "blue"
+        ? "text-blue-500"
+        : "text-zinc-100";
   return (
-    <div className="min-w-0 bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5 sm:p-4">
+    <div className="min-w-0 bg-zinc-950/70 border border-zinc-700/70 rounded-xl p-3.5 sm:p-4">
       <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">{label}</div>
-      <div className={`text-xl sm:text-2xl font-bold tabular-nums break-words ${valueColor}`}>{value}</div>
+      <div className={`text-xl sm:text-2xl font-bold tabular-nums break-words text-right sm:text-left ${valueColor}`}>{value}</div>
     </div>
   );
 }
@@ -1292,11 +2073,31 @@ function CategoryCard({
   onToggle: () => void;
   priority: "high" | "low" | "normal";
 }) {
+  const nameInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const amountInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const pendingFocus = useRef<{ idx: number; field: keyof Item } | null>(null);
   const update = (idx: number, field: keyof Item, value: string) =>
     setItems(items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
   const remove = (idx: number) => setItems(items.filter((_, i) => i !== idx));
-  const addBlank = () => setItems([...items, blank()]);
-  const addNamed = (n: string) => setItems([...items, { name: n, amount: "" }]);
+  const addBlank = () => {
+    pendingFocus.current = { idx: items.length, field: "name" };
+    setItems([...items, blank()]);
+  };
+  const addNamed = (n: string) => {
+    pendingFocus.current = { idx: items.length, field: "amount" };
+    setItems([...items, { name: n, amount: "" }]);
+  };
+
+  useEffect(() => {
+    const focusTarget = pendingFocus.current;
+    if (!focusTarget) return;
+    const refs = focusTarget.field === "name" ? nameInputRefs : amountInputRefs;
+    const input = refs.current[focusTarget.idx];
+    if (!input) return;
+    pendingFocus.current = null;
+    input.focus({ preventScroll: true });
+    input.select();
+  }, [items.length]);
 
   const onNameBlur = (idx: number, value: string) => {
     const fixed = normalizeName(value);
@@ -1371,6 +2172,9 @@ function CategoryCard({
               {items.map((it, idx) => (
                 <div key={idx} className="flex gap-2">
                   <input
+                    ref={(el) => {
+                      nameInputRefs.current[idx] = el;
+                    }}
                     type="text"
                     value={it.name}
                     onChange={(e) => update(idx, "name", e.target.value)}
@@ -1383,6 +2187,9 @@ function CategoryCard({
                       $
                     </span>
                     <input
+                      ref={(el) => {
+                        amountInputRefs.current[idx] = el;
+                      }}
                       type="number"
                       inputMode="decimal"
                       min="0"
