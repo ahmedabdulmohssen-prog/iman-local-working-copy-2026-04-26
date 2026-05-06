@@ -5,6 +5,7 @@ export type Priority = {
   text: string;
   monthlyImpact: number | null;
   difficulty: Difficulty;
+  targetReason: string;
   insight?: string;
   key?: string;
 };
@@ -242,6 +243,20 @@ function impactText(monthlyImpact: number): string {
 function secondaryImpactText(monthlyImpact: number): string {
   const monthly = roundMoneyForRecommendation(monthlyImpact);
   return `Estimated impact: ${fmt(monthly)}/mo, ${fmt(monthly * 12)}/yr.`;
+}
+
+function measuredImpactText(monthlyImpact: number): string {
+  const monthly = roundMoneyForRecommendation(monthlyImpact);
+  return `Measured impact: ${fmt(monthly)}/mo, ${fmt(monthly * 12)}/yr.`;
+}
+
+function reductionPercentText(currentAmount: number, monthlyImpact: number): string {
+  if (currentAmount <= 0) return "";
+  return `${Math.round((roundMoneyForRecommendation(monthlyImpact) / currentAmount) * 100)}%`;
+}
+
+function targetReason(parts: string[]): string {
+  return parts.filter(Boolean).join(" ");
 }
 
 const CATEGORY_CLASSIFICATIONS: CategoryClassifications = {
@@ -819,6 +834,12 @@ function buildShortTerm(
         key: "subscriptions",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged because ${subscriptions.length} recurring subscriptions total ${fmtRecommendation(subscriptionsTotal)}/mo.`,
+          `The target keeps the two largest services (${fmtRecommendation(top2Total)}/mo) and pauses ${dropped} lower-use ${dropped === 1 ? "service" : "services"}.`,
+          `Pattern: recurring bloat from more than two subscription lines.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore:
@@ -841,6 +862,14 @@ function buildShortTerm(
         key: "eating_out",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          eatingOut > groceries
+            ? `Flagged because eating out is ${fmtRecommendation(eatingOut)}/mo versus ${fmtRecommendation(groceries)}/mo in groceries.`
+            : `Flagged because eating out is ${fmtRecommendation(eatingOut)}/mo of flexible food spend.`,
+          `The target trims ${reductionPercentText(eatingOut, save)} of eating-out spend without touching groceries.`,
+          `Pattern: convenience meals are absorbing cash that could be retained.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: eatingOut > 400 ? "Medium" : "Easy",
         priorityScore: save + (eatingOut > groceries ? 250 : 0) + 95,
@@ -861,6 +890,12 @@ function buildShortTerm(
         key: "services",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged because controllable services total ${fmtRecommendation(controllableServicesTotal)}/mo.`,
+          `The target trims ${reductionPercentText(controllableServicesTotal, save)} by slowing cadence or rotating the lowest-value service.`,
+          `Pattern: convenience services are acting like a fixed monthly bill.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + categoryClassifications.Services.optimizationPriority,
@@ -881,6 +916,12 @@ function buildShortTerm(
         key: "misc",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged because miscellaneous spending is ${fmtRecommendation(controllableOtherTotal)}/mo.`,
+          `The target trims ${reductionPercentText(controllableOtherTotal, save)} with a weekly cap before extra purchases.`,
+          `Pattern: unplanned small purchases are accumulating into a visible monthly leak.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + categoryClassifications.Misc.optimizationPriority,
@@ -902,6 +943,12 @@ function buildShortTerm(
         key: "personal",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged because personal spending is ${fmtRecommendation(controllablePersonalTotal)}/mo.`,
+          `The target trims ${reductionPercentText(controllablePersonalTotal, save)} through a 48-hour pause before nonessential purchases.`,
+          `Pattern: flexible personal purchases are growing past the current visible threshold of ${fmtRecommendation(personalThreshold)}/mo.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + categoryClassifications.Personal.optimizationPriority,
@@ -922,6 +969,12 @@ function buildShortTerm(
         key: "insurance",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged because insurance lines total ${fmtRecommendation(insuranceTotal)}/mo.`,
+          `The target uses a quote check against the existing bill, not a lifestyle cut.`,
+          `Pattern: recurring insurance payments can drift while coverage stays unchanged.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Medium",
         priorityScore: save + 5,
@@ -939,6 +992,12 @@ function buildShortTerm(
         key: "utilities",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged because controllable utility-plan spending is ${fmtRecommendation(controllableUtilitiesTotal)}/mo.`,
+          `The target trims ${reductionPercentText(controllableUtilitiesTotal, save)} through a plan audit while keeping the service.`,
+          `Pattern: old plans may remain expensive after usage or market prices change.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + categoryClassifications.Utilities.optimizationPriority,
@@ -955,6 +1014,12 @@ function buildShortTerm(
         key: "debt",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged because debt payments total ${fmtRecommendation(debtTotal)}/mo.`,
+          `The target estimates payment relief from the current monthly payment amount only; it does not assume debt disappears.`,
+          `Pattern: payment pressure is reducing monthly flexibility.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Medium",
         priorityScore: save + 10,
@@ -968,10 +1033,11 @@ function buildShortTerm(
       if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
       return (b.monthlyImpact ?? 0) - (a.monthlyImpact ?? 0);
     });
-  return withImpact.slice(0, 3).map(({ text, insight, key, monthlyImpact, difficulty }) => ({
+  return withImpact.slice(0, 3).map(({ text, insight, key, monthlyImpact, difficulty, targetReason }) => ({
     text,
     insight,
     key,
+    targetReason,
     monthlyImpact,
     difficulty,
   }));
@@ -1057,6 +1123,12 @@ function optionalEfficientOptimization(
         key: "subscriptions",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged as a light tune-up because ${subscriptions.length} recurring subscriptions total ${fmtRecommendation(subscriptionsTotal)}/mo.`,
+          `The target keeps the two largest services (${fmtRecommendation(top2Total)}/mo) and pauses ${dropped} lower-use ${dropped === 1 ? "service" : "services"}.`,
+          `Pattern: small recurring charges are worth pruning even when the overall profile is strong.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 40,
@@ -1077,6 +1149,12 @@ function optionalEfficientOptimization(
         key: "eating_out",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged as a light tune-up because ${behavior}.`,
+          `The target trims ${reductionPercentText(eatingOut, save)} with one fewer takeout meal, not a full food reset.`,
+          `Pattern: flexible convenience spend is present, but not severe.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + (eatingOut > groceries ? 30 : 10),
@@ -1093,6 +1171,12 @@ function optionalEfficientOptimization(
         key: "misc",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged as a light tune-up because misc spending is ${fmtRecommendation(controllableOtherTotal)}/mo.`,
+          `The target trims ${reductionPercentText(controllableOtherTotal, save)} with one weekly cap.`,
+          `Pattern: small unplanned buys are visible but not driving the full plan.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save + 20,
@@ -1109,6 +1193,12 @@ function optionalEfficientOptimization(
         key: "services",
         text: parts.action,
         insight: parts.insight,
+        targetReason: targetReason([
+          `Flagged as a light tune-up because services total ${fmtRecommendation(controllableServicesTotal)}/mo.`,
+          `The target trims ${reductionPercentText(controllableServicesTotal, save)} by slowing cadence rather than removing the category.`,
+          `Pattern: convenience spending is present, but the overall profile is still efficient.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Easy",
         priorityScore: save,
@@ -1122,6 +1212,7 @@ function optionalEfficientOptimization(
     text: best.text,
     insight: best.insight,
     key: best.key,
+    targetReason: best.targetReason,
     monthlyImpact: best.monthlyImpact,
     difficulty: best.difficulty,
   };
@@ -1136,6 +1227,12 @@ function buildEfficientUserOpportunities(
     key: "allocation",
     text: `Direct the ${fmt(surplus)}/mo surplus toward savings or investments first.`,
     insight: `You're in a strong position: spending is balanced and current surplus is ${fmt(surplus)}/mo, or ${fmt(surplus * 12)}/yr. Why it matters: with low leakage, compounding surplus will do more than chasing a handful of small cuts.`,
+    targetReason: targetReason([
+      `Flagged because current monthly surplus is ${fmt(surplus)}/mo and visible leakage is low.`,
+      `The target allocates the surplus instead of inventing unnecessary cuts.`,
+      `Pattern: efficient spending with strong retained cash.`,
+      `Measured impact: protects ${fmt(surplus)}/mo, ${fmt(surplus * 12)}/yr of available cash flow.`,
+    ]),
     monthlyImpact: null,
     difficulty: "Easy",
   };
@@ -1184,6 +1281,12 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
         debt.length >= 2
           ? `Compare consolidation options for ${debt.length} debt balances and look for about ${fmtRecommendation(save)}/mo of payment relief. Why it matters: scattered payments reduce flexibility; one lower-rate structure can return cash flow without pretending the debt disappeared. ${impactText(save)}`
           : `Compare refinance options on ${fmtRecommendation(debtTotal)}/mo of debt payments and look for about ${fmtRecommendation(save)}/mo of relief. Why it matters: less payment pressure improves monthly oxygen while you keep paying the balance down. ${impactText(save)}`,
+      targetReason: targetReason([
+        `Flagged because debt payments total ${fmtRecommendation(debtTotal)}/mo across ${debt.length} ${debt.length === 1 ? "line" : "lines"}.`,
+        `The target estimates payment relief from current monthly payments only and does not assume debt disappears.`,
+        `Pattern: debt payment pressure is limiting monthly flexibility.`,
+        measuredImpactText(save),
+      ]),
       monthlyImpact: save,
       difficulty: "Medium",
     });
@@ -1195,6 +1298,12 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
     moves.push({
       key: "recurring_costs",
       text: `Simplify food, subscriptions, and misc by about ${fmtRecommendation(save)}/mo over 6 months. Why it matters: the combined bundle is ${fmtRecommendation(leakageTotal)}/mo, so small leaks across several categories are acting like one large bill. ${impactText(save)}`,
+      targetReason: targetReason([
+        `Flagged because food, subscriptions, and misc total ${fmtRecommendation(leakageTotal)}/mo as a combined leakage bundle.`,
+        `The target trims ${reductionPercentText(leakageTotal, save)} over 6 months across multiple flexible categories.`,
+        `Pattern: several small leaks are acting like one large recurring bill.`,
+        measuredImpactText(save),
+      ]),
       monthlyImpact: save,
       difficulty: "Medium",
     });
@@ -1207,6 +1316,12 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
       moves.push({
         key: "housing",
         text: `At lease renewal, compare housing options in the ${fmtRecommendation(newHousing)}/mo range and look for about ${fmtRecommendation(save)}/mo of relief. Why it matters: housing is a fixed-cost anchor, so improving it changes every future month. ${impactText(save)}`,
+        targetReason: targetReason([
+          `Flagged because housing is ${fmtRecommendation(housingTotal)}/mo against ${fmtRecommendation(income)}/mo income.`,
+          `The target compares options around ${fmtRecommendation(newHousing)}/mo at renewal instead of assuming an immediate move.`,
+          `Pattern: a fixed-cost anchor is carrying long-term cash-flow pressure.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Hard",
       });
@@ -1224,6 +1339,12 @@ function buildLongTerm(opts: RecommendationInputs): Priority[] {
       moves.push({
         key: "transportation",
         text: `At the next vehicle decision, choose a payment, insurance, and fuel setup around ${fmtRecommendation(newTransport)}/mo and free about ${fmtRecommendation(save)}/mo. Why it matters: vehicle costs behave like fixed costs, and lowering them frees cash without touching daily essentials. ${impactText(save)}`,
+        targetReason: targetReason([
+          `Flagged because transportation is ${fmtRecommendation(transportationTotal)}/mo against ${fmtRecommendation(income)}/mo income.`,
+          `The target compares a future setup around ${fmtRecommendation(newTransport)}/mo at the next vehicle decision.`,
+          `Pattern: vehicle costs are behaving like a fixed-cost drag.`,
+          measuredImpactText(save),
+        ]),
         monthlyImpact: save,
         difficulty: "Hard",
       });

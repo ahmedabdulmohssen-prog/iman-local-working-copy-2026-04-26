@@ -19,6 +19,7 @@ type Priority = {
   text: string;
   monthlyImpact: number | null;
   difficulty: Difficulty;
+  targetReason?: string;
   insight?: string;
   key?: string;
 };
@@ -1154,6 +1155,11 @@ function PriorityList({ items }: { items: Priority[] }) {
             <div className="text-sm text-zinc-200 leading-relaxed break-words">
               {m.text}
             </div>
+            {m.targetReason && (
+              <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
+                {m.targetReason}
+              </p>
+            )}
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
               {typeof m.monthlyImpact === "number" && m.monthlyImpact > 0 && (
                 <span className="text-[11px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/12 px-2 py-0.5 rounded-md tabular-nums whitespace-nowrap">

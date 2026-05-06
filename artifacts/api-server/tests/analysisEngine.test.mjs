@@ -72,6 +72,7 @@ function assertImpactText(move) {
   const yearly = Number(impact[2].replace(/,/g, ""));
   assert.equal(monthly, move.monthlyImpact);
   assert.equal(yearly, monthly * 12);
+  assertTargetReason(move);
 }
 
 function assertLongTermImpactText(move) {
@@ -85,6 +86,21 @@ function assertLongTermImpactText(move) {
   const yearly = Number(impact[2].replace(/,/g, ""));
   assert.equal(monthly, move.monthlyImpact);
   assert.equal(yearly, monthly * 12);
+  assertTargetReason(move);
+}
+
+function assertTargetReason(move) {
+  assert.equal(typeof move.targetReason, "string");
+  assert.ok(move.targetReason.length > 40);
+  assert.match(move.targetReason, /Flagged/i);
+  assert.match(move.targetReason, /\btarget\b/i);
+  assert.match(move.targetReason, /Pattern:/);
+  assert.match(move.targetReason, /Measured impact:/);
+  assert.doesNotMatch(move.targetReason, /should save more money|be smarter|bad habit/i);
+  if (typeof move.monthlyImpact === "number") {
+    assert.match(move.targetReason, /\$\d[\d,]*\/mo/);
+    assert.match(move.targetReason, /\$\d[\d,]*\/yr/);
+  }
 }
 
 const tests = [];
@@ -136,6 +152,9 @@ test("efficient users get validation and cash flow guidance instead of small cut
   assert.match(guidance.insight, /spending is balanced/);
   assert.match(guidance.insight, /surplus is \$5,770\/mo, or \$69,240\/yr/);
   assert.match(guidance.insight, /more than chasing .* small cuts/);
+  assertTargetReason(guidance);
+  assert.match(guidance.targetReason, /current monthly surplus is \$5,770\/mo/);
+  assert.match(guidance.targetReason, /allocates the surplus instead of inventing unnecessary cuts/);
 
   const optionalCuts = result.shortTermPriorities.filter(
     (move) => typeof move.monthlyImpact === "number",
@@ -224,6 +243,13 @@ test("subscription bloat triggers cancellation recommendation", () => {
       /\d+ lower-use subscriptions?/.test(move.text),
     ),
   );
+  const subscriptionMove = result.shortTermPriorities.find(
+    (move) => move.key === "subscriptions",
+  );
+  assert.ok(subscriptionMove);
+  assertTargetReason(subscriptionMove);
+  assert.match(subscriptionMove.targetReason, /6 recurring subscriptions total \$230\/mo/);
+  assert.match(subscriptionMove.targetReason, /keeps the two largest services \(\$110\/mo\)/);
   assert.ok(scorePart(result, "Subscription Bloat").points < 10);
 });
 
@@ -313,6 +339,9 @@ test("recommendation display rounds to nearest five and annualizes rounded month
   assert.match(foodMove.text, /Cut 1-2 takeout meals this week/);
   assert.match(foodMove.text, /Estimated impact: \$135\/mo, \$1,620\/yr/);
   assert.match(foodMove.insight, /takeout is \$335\/mo versus \$100\/mo/);
+  assert.match(foodMove.targetReason, /eating out is \$335\/mo versus \$100\/mo in groceries/);
+  assert.match(foodMove.targetReason, /trims 41% of eating-out spend/);
+  assert.match(foodMove.targetReason, /Measured impact: \$135\/mo, \$1,620\/yr/);
   assert.doesNotMatch(foodMove.text, /move .* groceries/i);
   assert.doesNotMatch(foodMove.text, /Set takeout/i);
   assert.doesNotMatch(foodMove.text, /bring .*closer/i);
@@ -340,6 +369,13 @@ test("debt pressure is scored separately and creates long-term debt action", () 
       /consolidation|refinance/i.test(move.text),
     ),
   );
+  const debtMove = result.longTermOpportunities.find((move) =>
+    /consolidation|refinance/i.test(move.text),
+  );
+  assert.ok(debtMove);
+  assertTargetReason(debtMove);
+  assert.match(debtMove.targetReason, /debt payments total \$1,600\/mo across 2 lines/);
+  assert.match(debtMove.targetReason, /does not assume debt disappears/);
 });
 
 test("long term opportunities exclude income and job advice", () => {
