@@ -1,4 +1,37 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+} from "react";
+import {
+  ArrowRight,
+  Banknote,
+  Building,
+  Car,
+  CheckCircle,
+  ChevronRight,
+  CreditCard,
+  Home,
+  KeyRound,
+  LineChart,
+  MapPin,
+  MoreHorizontal,
+  PiggyBank,
+  Plus,
+  Repeat,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingUp,
+  User,
+  Utensils,
+  Wallet,
+  X,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import imanWordmark from "./Assets/iman-wordmark.png";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3001";
@@ -109,11 +142,68 @@ const CATEGORY_DEFAULTS: Record<CategoryName, string[]> = {
   Utilities: ["Electricity", "Water", "Internet", "Phone"],
   Food: ["Groceries", "Eating Out"],
   Transportation: ["Car Payment", "Fuel", "Insurance"],
-  Services: ["Cleaning", "Laundry", "Lawn"],
+  Services: ["House Cleaning", "Laundry", "Lawn"],
   Subscriptions: [],
   Debt: ["Credit Cards", "Loans"],
   Personal: ["Clothing", "Grooming"],
   Misc: [],
+};
+
+const CATEGORY_ICONS: Record<CategoryName, LucideIcon> = {
+  Housing: Home,
+  Food: Utensils,
+  Utilities: Zap,
+  Transportation: Car,
+  Services: Sparkles,
+  Subscriptions: Repeat,
+  Debt: CreditCard,
+  Personal: User,
+  Misc: MoreHorizontal,
+};
+
+const ONBOARDING_COMPLETED_KEY = "iman.onboardingCompleted";
+const ONBOARDING_PROFILE_KEY = "iman.onboardingProfile";
+
+type CharacterMood =
+  | "neutral"
+  | "thinking"
+  | "explaining"
+  | "warning"
+  | "celebration"
+  | "mobile"
+  | "empty";
+
+const CHARACTER_ASSETS: Record<CharacterMood, string> = {
+  neutral: "iman-neutral.png",
+  thinking: "iman-thinking.png",
+  explaining: "iman-explaining.png",
+  warning: "iman-warning.png",
+  celebration: "iman-celebration.png",
+  mobile: "iman-mobile-companion.png",
+  empty: "iman-empty-state.png",
+};
+
+const INCOME_ONBOARDING_INSIGHTS = [
+  "Income stability affects long term flexibility.",
+  "Small monthly changes compound over time.",
+  "Your income shapes recommendation accuracy.",
+];
+
+type OnboardingProfile = {
+  incomeCadence: "monthly" | "annual";
+  incomeAmount: string;
+  zipCode: string;
+  housingStatus: "rent" | "own" | "";
+  goal: string;
+  completedAt?: string;
+};
+
+const emptyOnboardingProfile: OnboardingProfile = {
+  incomeCadence: "monthly",
+  incomeAmount: "",
+  zipCode: "",
+  housingStatus: "",
+  goal: "",
 };
 
 const TYPO_MAP: Record<string, string> = {
@@ -137,6 +227,7 @@ const TYPO_MAP: Record<string, string> = {
   groomming: "Grooming",
   cloths: "Clothing",
   clothings: "Clothing",
+  cleaning: "House Cleaning",
 };
 
 function normalizeName(raw: string): string {
@@ -166,7 +257,9 @@ function buildDefaultCategories(): Record<CategoryName, Item[]> {
 }
 
 function isCategoryName(value: unknown): value is CategoryName {
-  return typeof value === "string" && CATEGORY_NAMES.includes(value as CategoryName);
+  return (
+    typeof value === "string" && CATEGORY_NAMES.includes(value as CategoryName)
+  );
 }
 
 function loadStoredExpenses(): Expense[] {
@@ -203,11 +296,84 @@ function loadStoredExpenses(): Expense[] {
   }
 }
 
+function loadStoredOnboardingProfile(): OnboardingProfile {
+  if (typeof window === "undefined") return emptyOnboardingProfile;
+  try {
+    const raw = window.localStorage.getItem(ONBOARDING_PROFILE_KEY);
+    if (!raw) return emptyOnboardingProfile;
+    const parsed = JSON.parse(raw);
+    return {
+      incomeCadence: parsed?.incomeCadence === "annual" ? "annual" : "monthly",
+      incomeAmount:
+        typeof parsed?.incomeAmount === "string" ? parsed.incomeAmount : "",
+      zipCode: typeof parsed?.zipCode === "string" ? parsed.zipCode : "",
+      housingStatus:
+        parsed?.housingStatus === "rent" || parsed?.housingStatus === "own"
+          ? parsed.housingStatus
+          : "",
+      goal: typeof parsed?.goal === "string" ? parsed.goal : "",
+      completedAt:
+        typeof parsed?.completedAt === "string" ? parsed.completedAt : "",
+    };
+  } catch {
+    return emptyOnboardingProfile;
+  }
+}
+
+function getOnboardingCompleted() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(ONBOARDING_COMPLETED_KEY) === "true";
+}
+
+function getSliderStyle(
+  value: number,
+  min: number,
+  max: number,
+): CSSProperties {
+  const progress = ((value - min) / (max - min)) * 100;
+  return {
+    "--slider-progress": `${Math.max(0, Math.min(100, progress))}%`,
+  } as CSSProperties;
+}
+
+function getCharacterSrc(mood: CharacterMood) {
+  return `${import.meta.env.BASE_URL}characters/${CHARACTER_ASSETS[mood]}`;
+}
+
+function CharacterMascot({
+  mood,
+  alt,
+  className = "",
+}: {
+  mood: CharacterMood;
+  alt: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center bg-transparent ${className}`}
+      style={{ backgroundColor: "transparent" }}
+    >
+      <img
+        src={getCharacterSrc(mood)}
+        alt={alt}
+        className="iman-character-image block h-full w-full object-contain bg-transparent"
+        style={{ backgroundColor: "transparent" }}
+        loading="lazy"
+        decoding="async"
+      />
+    </span>
+  );
+}
+
 function isCurrentMonthExpense(expense: Expense) {
   const date = new Date(expense.date);
   if (Number.isNaN(date.getTime())) return false;
   const now = new Date();
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth()
+  );
 }
 
 function buildCategoriesFromExpenses(expenses: Expense[]) {
@@ -228,6 +394,12 @@ function buildCategoriesFromExpenses(expenses: Expense[]) {
 
 function App() {
   const [income, setIncome] = useState("");
+  const [onboardingCompleted, setOnboardingCompleted] = useState(
+    getOnboardingCompleted,
+  );
+  const [onboardingProfile, setOnboardingProfile] = useState<OnboardingProfile>(
+    loadStoredOnboardingProfile,
+  );
   const [creditScoreRange, setCreditScoreRange] = useState("740–799");
   const [categories, setCategories] = useState<Record<CategoryName, Item[]>>(
     buildDefaultCategories(),
@@ -248,6 +420,29 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(EXPENSE_STORAGE_KEY, JSON.stringify(expenses));
   }, [expenses]);
+
+  const completeOnboarding = (profile: OnboardingProfile) => {
+    const completedProfile = {
+      ...profile,
+      completedAt: new Date().toISOString(),
+    };
+    setOnboardingProfile(completedProfile);
+    setOnboardingCompleted(true);
+    window.localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
+    window.localStorage.setItem(
+      ONBOARDING_PROFILE_KEY,
+      JSON.stringify(completedProfile),
+    );
+
+    const enteredIncome = Number(profile.incomeAmount);
+    if (Number.isFinite(enteredIncome) && enteredIncome > 0) {
+      const monthlyIncome =
+        profile.incomeCadence === "annual"
+          ? Math.round(enteredIncome / 12)
+          : enteredIncome;
+      setIncome(String(monthlyIncome));
+    }
+  };
 
   const currentMonthExpenses = useMemo(
     () => expenses.filter(isCurrentMonthExpense),
@@ -289,7 +484,10 @@ function App() {
       return;
     }
 
-    const payloadCategories = {} as Record<CategoryName, { name: string; amount: number }[]>;
+    const payloadCategories = {} as Record<
+      CategoryName,
+      { name: string; amount: number }[]
+    >;
     let anyExpense = false;
     for (const name of CATEGORY_NAMES) {
       const cleaned = toPayloadItems(categorySource[name]);
@@ -357,9 +555,7 @@ function App() {
       );
     } catch (err) {
       console.warn("insights failed", err);
-      setResult((prev) =>
-        prev ? { ...prev, insightsLoading: false } : prev,
-      );
+      setResult((prev) => (prev ? { ...prev, insightsLoading: false } : prev));
     }
   };
 
@@ -388,6 +584,15 @@ function App() {
     ]);
     setIsAddingExpense(false);
   };
+
+  if (!onboardingCompleted) {
+    return (
+      <OnboardingFlow
+        initialProfile={onboardingProfile}
+        onComplete={completeOnboarding}
+      />
+    );
+  }
 
   return (
     <div
@@ -421,21 +626,21 @@ function App() {
         </g>
       </svg>
 
-<div className="relative z-10 max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-6 pb-24 sm:py-8 sm:pb-28 lg:py-12">
-  <header className="flex items-center justify-between mb-6 sm:mb-10 gap-3">
-    <div className="flex items-center min-w-0">
-      <img
-        src={imanWordmark}
-        alt="IMAN"
-        className="h-10 sm:h-12 w-auto object-contain"
-      />
-    </div>
+      <div className="relative z-10 max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-6 pb-24 sm:py-8 sm:pb-28 lg:py-12">
+        <header className="flex items-center justify-between mb-6 sm:mb-10 gap-3">
+          <div className="flex items-center min-w-0">
+            <img
+              src={imanWordmark}
+              alt="IMAN"
+              className="h-10 sm:h-12 w-auto object-contain"
+            />
+          </div>
 
-    <div className="hidden sm:flex shrink-0 items-center gap-2 text-sm sm:text-[11px] text-zinc-500">
-      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-      Live model
-    </div>
-  </header>
+          <div className="hidden sm:flex shrink-0 items-center gap-2 text-sm sm:text-[11px] text-zinc-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+            Live model
+          </div>
+        </header>
 
         <div className="flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-5 sm:gap-6 lg:gap-8 lg:items-start min-w-0">
           <aside className="min-w-0 lg:sticky lg:top-8">
@@ -466,65 +671,38 @@ function App() {
                 <label className="block text-sm sm:text-[11px] uppercase tracking-wider text-zinc-500 mb-2">
                   Credit Score Range
                 </label>
-                
+
                 {(() => {
-                  const ranges = ["300–579", "580–669", "670–739", "740–799", "800–850"];
-                  const labels = ["Poor", "Fair", "Good", "Very Good", "Excellent"];
+                  const ranges = [
+                    "300–579",
+                    "580–669",
+                    "670–739",
+                    "740–799",
+                    "800–850",
+                  ];
+                  const labels = [
+                    "Poor",
+                    "Fair",
+                    "Good",
+                    "Very Good",
+                    "Excellent",
+                  ];
                   const currentIndex = ranges.indexOf(creditScoreRange);
-                  
+
                   return (
                     <div className="space-y-3">
-                      <style>{`
-                        .credit-score-slider {
-                          appearance: none;
-                          -webkit-appearance: none;
-                          width: 100%;
-                          height: 6px;
-                          border-radius: 9999px;
-                          background: rgb(63, 63, 70);
-                          outline: none;
-                          cursor: pointer;
-                        }
-                        .credit-score-slider::-webkit-slider-thumb {
-                          appearance: none;
-                          -webkit-appearance: none;
-                          width: 16px;
-                          height: 16px;
-                          border-radius: 50%;
-                          background: rgb(59, 130, 246);
-                          cursor: pointer;
-                          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-                        }
-                        .credit-score-slider::-moz-range-track {
-                          background: transparent;
-                          border: none;
-                        }
-                        .credit-score-slider::-moz-range-progress {
-                          background: rgb(59, 130, 246);
-                          height: 6px;
-                          border-radius: 9999px;
-                        }
-                        .credit-score-slider::-moz-range-thumb {
-                          width: 16px;
-                          height: 16px;
-                          border-radius: 50%;
-                          background: rgb(59, 130, 246);
-                          cursor: pointer;
-                          border: none;
-                          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-                        }
-                      `}</style>
                       <input
                         type="range"
                         min="1"
                         max="5"
                         step="1"
                         value={currentIndex + 1}
+                        style={getSliderStyle(currentIndex + 1, 1, 5)}
                         onChange={(e) => {
                           const idx = Number(e.target.value) - 1;
                           setCreditScoreRange(ranges[idx]);
                         }}
-                        className="credit-score-slider"
+                        className="iman-slider"
                       />
                       <div className="text-center">
                         <div className="text-sm sm:text-[12px] font-semibold text-zinc-100">
@@ -581,8 +759,9 @@ function App() {
                     max={100}
                     step={5}
                     value={investPct}
+                    style={getSliderStyle(investPct, 25, 100)}
                     onChange={(e) => setInvestPct(Number(e.target.value))}
-                    className="flex-1 credit-score-slider"
+                    className="iman-slider flex-1"
                   />
                   <input
                     type="number"
@@ -592,7 +771,8 @@ function App() {
                     value={investPct}
                     onChange={(e) => {
                       const n = Number(e.target.value);
-                      if (Number.isFinite(n)) setInvestPct(Math.min(100, Math.max(25, n)));
+                      if (Number.isFinite(n))
+                        setInvestPct(Math.min(100, Math.max(25, n)));
                     }}
                     className="w-16 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-sm text-zinc-100 tabular-nums focus:outline-none focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 transition"
                   />
@@ -602,7 +782,7 @@ function App() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-950 font-semibold py-3 rounded-xl transition shadow-lg shadow-blue-600/15"
+                className="w-full bg-blue-500 hover:bg-blue-400 active:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-950 font-bold py-3.5 rounded-xl transition shadow-lg shadow-blue-500/20"
               >
                 {loading ? (
                   <span className="inline-flex items-center gap-2">
@@ -617,8 +797,9 @@ function App() {
               <button
                 type="button"
                 onClick={() => setIsAddingExpense(true)}
-                className="w-full border border-zinc-800 bg-zinc-950/60 hover:bg-zinc-900 text-zinc-100 font-semibold py-3 rounded-xl transition"
+                className="w-full inline-flex items-center justify-center gap-2 border border-blue-500/18 bg-blue-500/8 hover:bg-blue-500/12 text-blue-100 font-semibold py-3 rounded-xl transition"
               >
+                <Plus size={16} />
                 Add Expense
               </button>
 
@@ -626,7 +807,7 @@ function App() {
                 type="button"
                 onClick={analyzeWithActualSpending}
                 disabled={loading || currentMonthExpenses.length === 0}
-                className="w-full border border-zinc-800 bg-zinc-950/60 hover:bg-zinc-900 disabled:opacity-45 disabled:cursor-not-allowed text-zinc-100 font-semibold py-3 rounded-xl transition"
+                className="w-full text-sm border border-zinc-800/80 bg-transparent hover:bg-zinc-900/70 disabled:opacity-45 disabled:cursor-not-allowed text-zinc-400 hover:text-zinc-200 font-semibold py-2.5 rounded-xl transition"
               >
                 {loading ? "Analyzing..." : "Analyze with actual spending"}
               </button>
@@ -655,6 +836,435 @@ function App() {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+function OnboardingFlow({
+  initialProfile,
+  onComplete,
+}: {
+  initialProfile: OnboardingProfile;
+  onComplete: (profile: OnboardingProfile) => void;
+}) {
+  const [step, setStep] = useState(0);
+  const [profile, setProfile] = useState<OnboardingProfile>(initialProfile);
+  const totalSteps = 6;
+  const progress = ((step + 1) / totalSteps) * 100;
+  const isWelcomeStep = step === 0;
+  const balancedStep = step === 2 || step === 3 || step === 4;
+  const [incomeInsightIndex, setIncomeInsightIndex] = useState(0);
+  const [incomeInsightVisible, setIncomeInsightVisible] = useState(true);
+  const goals = [
+    "Find monthly savings",
+    "Pay down debt",
+    "Build emergency cash",
+    "Invest more consistently",
+  ];
+
+  const updateProfile = (patch: Partial<OnboardingProfile>) =>
+    setProfile((prev) => ({ ...prev, ...patch }));
+
+  useEffect(() => {
+    if (step !== 1) {
+      setIncomeInsightVisible(true);
+      return;
+    }
+
+    let swapTimer: number | undefined;
+    let fadeInTimer: number | undefined;
+    const rotationTimer = window.setInterval(() => {
+      setIncomeInsightVisible(false);
+      swapTimer = window.setTimeout(() => {
+        setIncomeInsightIndex(
+          (current) => (current + 1) % INCOME_ONBOARDING_INSIGHTS.length,
+        );
+        fadeInTimer = window.setTimeout(() => {
+          setIncomeInsightVisible(true);
+        }, 350);
+      }, 2600);
+    }, 11000);
+
+    return () => {
+      window.clearInterval(rotationTimer);
+      if (swapTimer !== undefined) window.clearTimeout(swapTimer);
+      if (fadeInTimer !== undefined) window.clearTimeout(fadeInTimer);
+    };
+  }, [step]);
+
+  const canContinue =
+    step === 0 ||
+    step === 5 ||
+    (step === 1 && Number(profile.incomeAmount) > 0) ||
+    (step === 2 && /^\d{5}$/.test(profile.zipCode.trim())) ||
+    (step === 3 && profile.housingStatus !== "") ||
+    (step === 4 && profile.goal !== "");
+
+  const next = () => {
+    if (!canContinue) return;
+    if (step === totalSteps - 1) {
+      onComplete(profile);
+      return;
+    }
+    setStep((current) => Math.min(totalSteps - 1, current + 1));
+  };
+
+  const back = () => setStep((current) => Math.max(0, current - 1));
+
+  const stepLabel =
+    step === 0
+      ? "Welcome"
+      : step === 1
+        ? "Income"
+        : step === 2
+          ? "Location"
+          : step === 3
+            ? "Home"
+            : step === 4
+              ? "Goal"
+              : "Walkthrough";
+
+  return (
+    <div
+      className="relative isolate min-h-screen w-full overflow-x-hidden text-zinc-100 antialiased selection:bg-blue-500/30"
+      style={{
+        background:
+          "radial-gradient(circle at top, rgba(15,23,42,0.96), #020617 58%, #000000)",
+      }}
+    >
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(34rem_34rem_at_50%_0%,rgba(37,99,235,0.16),transparent_62%)]" />
+      <main className="mx-auto flex min-h-[100dvh] w-full max-w-lg flex-col px-4 py-4 sm:px-6 sm:py-6">
+        <header className="mb-4 flex items-center justify-between">
+          <img
+            src={imanWordmark}
+            alt="IMAN"
+            className="h-9 w-auto object-contain"
+          />
+          <div className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-200">
+            {step + 1}/{totalSteps}
+          </div>
+        </header>
+
+        <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-zinc-900">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-300 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <section className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-950/72 p-4 shadow-2xl shadow-black/40 sm:p-5">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-[radial-gradient(24rem_10rem_at_50%_100%,rgba(37,99,235,0.16),transparent_70%)]" />
+          {step === 1 && (
+            <div className="iman-onboarding-income-blend pointer-events-none absolute inset-x-0 bottom-0 h-72" />
+          )}
+          <svg
+            className={`pointer-events-none absolute inset-x-0 bottom-16 h-28 w-full text-blue-300/20 ${
+              step === 1 ? "iman-onboarding-wave" : ""
+            }`}
+            viewBox="0 0 420 120"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M0 86 C52 72 82 88 126 66 S207 18 260 42 335 94 420 52"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+            />
+            <path
+              d="M0 108 C66 96 107 102 153 84 S233 58 286 75 353 99 420 78"
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity="0.45"
+              strokeWidth="1"
+            />
+          </svg>
+
+          <div
+            className={`relative z-10 flex flex-1 flex-col ${
+              isWelcomeStep
+                ? "justify-center py-1"
+                : balancedStep
+                  ? "justify-center pb-6"
+                  : "justify-start pt-1"
+            }`}
+          >
+            <div
+              className={
+                isWelcomeStep ? "flex flex-col items-center text-center" : ""
+              }
+            >
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-300/80">
+                {stepLabel}
+              </div>
+              {step === 0 && (
+                <>
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-200">
+                    <ShieldCheck size={22} />
+                  </div>
+                  <h1 className="max-w-[18rem] bg-transparent text-3xl font-bold leading-tight text-zinc-50 sm:max-w-sm sm:text-[2rem]">
+                    Turn spending into insight.
+                  </h1>
+                  <p className="mt-3 max-w-[21rem] bg-transparent text-sm leading-relaxed text-zinc-400 sm:text-[15px]">
+                    Built to uncover financial patterns, optimization
+                    opportunities, and long term financial impact.
+                  </p>
+                  <div className="iman-onboarding-hero-mascot relative mt-2 flex w-full justify-center bg-transparent sm:mt-3">
+                    <CharacterMascot
+                      mood="neutral"
+                      alt="IMAN assistant"
+                      className="relative z-10 h-56 w-56 translate-y-3 sm:h-64 sm:w-64 sm:translate-y-4"
+                    />
+                  </div>
+                </>
+              )}
+
+              {step === 1 && (
+                <>
+                  <h1 className="text-2xl font-bold leading-tight text-zinc-50">
+                    Tell me about your income
+                  </h1>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                    Enter your income information to personalize your financial
+                    analysis and monthly recommendations.
+                  </p>
+                  <div className="mt-5 grid grid-cols-2 gap-2">
+                    {(["monthly", "annual"] as const).map((cadence) => (
+                      <button
+                        key={cadence}
+                        type="button"
+                        onClick={() =>
+                          updateProfile({ incomeCadence: cadence })
+                        }
+                        className={`rounded-xl border px-3 py-3 text-sm font-semibold capitalize transition ${
+                          profile.incomeCadence === cadence
+                            ? "border-blue-400/50 bg-blue-500/15 text-blue-100"
+                            : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:border-zinc-700"
+                        }`}
+                      >
+                        {cadence}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="mt-4 block">
+                    <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-zinc-500">
+                      {profile.incomeCadence === "annual"
+                        ? "Annual income"
+                        : "Monthly income"}
+                    </span>
+                    <div className="relative">
+                      <Banknote
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"
+                        size={16}
+                      />
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        value={profile.incomeAmount}
+                        onChange={(event) =>
+                          updateProfile({ incomeAmount: event.target.value })
+                        }
+                        placeholder={
+                          profile.incomeCadence === "annual" ? "114000" : "9500"
+                        }
+                        className="w-full rounded-xl border border-zinc-800 bg-black py-3 pl-10 pr-3 text-lg font-semibold text-zinc-100 tabular-nums placeholder-zinc-700 outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                  </label>
+                  <div className="mt-7 flex flex-col items-center text-center">
+                    <div className="iman-income-insight-rotation relative h-10 w-full max-w-[20rem] text-xs leading-relaxed text-zinc-400/85 sm:text-[13px]">
+                      <p
+                        className={`iman-income-insight-text ${
+                          incomeInsightVisible
+                            ? "is-visible"
+                            : "is-transitioning"
+                        }`}
+                      >
+                        {INCOME_ONBOARDING_INSIGHTS[incomeInsightIndex]}
+                      </p>
+                    </div>
+                    <div className="iman-onboarding-income-companion relative mt-6 flex w-full justify-center bg-transparent">
+                      <CharacterMascot
+                        mood="explaining"
+                        alt="IMAN assistant explaining income context"
+                        className="relative z-10 h-52 w-52 translate-y-10 sm:h-56 sm:w-56 sm:translate-y-10"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <h1 className="text-2xl font-bold leading-tight text-zinc-50">
+                    What ZIP code should IMAN use?
+                  </h1>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                    This is saved locally for context only.
+                  </p>
+                  <label className="mt-5 block">
+                    <span className="mb-1.5 block text-[11px] uppercase tracking-wider text-zinc-500">
+                      ZIP code
+                    </span>
+                    <div className="relative">
+                      <MapPin
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"
+                        size={16}
+                      />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={5}
+                        value={profile.zipCode}
+                        onChange={(event) =>
+                          updateProfile({
+                            zipCode: event.target.value.replace(/\D/g, ""),
+                          })
+                        }
+                        placeholder="30309"
+                        className="w-full rounded-xl border border-zinc-800 bg-black py-3 pl-10 pr-3 text-lg font-semibold text-zinc-100 tabular-nums placeholder-zinc-700 outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                  </label>
+                </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <h1 className="text-2xl font-bold leading-tight text-zinc-50">
+                    Do you rent or own?
+                  </h1>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    {[
+                      { value: "rent", label: "Rent", icon: KeyRound },
+                      { value: "own", label: "Own", icon: Building },
+                    ].map(({ value, label, icon: Icon }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() =>
+                          updateProfile({
+                            housingStatus:
+                              value as OnboardingProfile["housingStatus"],
+                          })
+                        }
+                        className={`flex min-h-28 flex-col items-center justify-center gap-3 rounded-2xl border p-4 text-sm font-semibold transition ${
+                          profile.housingStatus === value
+                            ? "border-blue-400/50 bg-blue-500/15 text-blue-100"
+                            : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:border-zinc-700"
+                        }`}
+                      >
+                        <Icon size={24} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {step === 4 && (
+                <>
+                  <h1 className="text-2xl font-bold leading-tight text-zinc-50">
+                    What should IMAN optimize for first?
+                  </h1>
+                  <div className="mt-5 space-y-2">
+                    {goals.map((goal) => (
+                      <button
+                        key={goal}
+                        type="button"
+                        onClick={() => updateProfile({ goal })}
+                        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm font-semibold transition ${
+                          profile.goal === goal
+                            ? "border-blue-400/50 bg-blue-500/15 text-blue-100"
+                            : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:border-zinc-700"
+                        }`}
+                      >
+                        <span className="flex items-center gap-3">
+                          <Target size={17} />
+                          {goal}
+                        </span>
+                        {profile.goal === goal && <CheckCircle size={16} />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {step === 5 && (
+                <>
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-200">
+                    <CheckCircle size={22} />
+                  </div>
+                  <h1 className="text-2xl font-bold leading-tight text-zinc-50">
+                    Your dashboard is ready.
+                  </h1>
+                  <div className="mt-5 space-y-3">
+                    {[
+                      {
+                        icon: Wallet,
+                        text: "Enter the monthly expenses you know first.",
+                      },
+                      {
+                        icon: LineChart,
+                        text: "Run Analysis to see score, savings, and cash flow.",
+                      },
+                      {
+                        icon: PiggyBank,
+                        text: "Use Add Expense for quick real-world tracking.",
+                      },
+                    ].map(({ icon: Icon, text }) => (
+                      <div
+                        key={text}
+                        className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-300"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-200">
+                          <Icon size={17} />
+                        </span>
+                        {text}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div
+            className={`relative z-10 flex items-center gap-3 border-t border-zinc-800/70 pt-4 ${
+              isWelcomeStep ? "mt-4" : "mt-6"
+            }`}
+          >
+            {step > 0 && (
+              <button
+                type="button"
+                onClick={back}
+                className="h-11 rounded-xl border border-zinc-800 bg-zinc-900/70 px-4 text-sm font-semibold text-zinc-300 transition hover:border-zinc-700"
+              >
+                Back
+              </button>
+            )}
+            {step === 0 && (
+              <button
+                type="button"
+                onClick={() => onComplete(profile)}
+                className="h-11 rounded-xl px-2 text-sm font-semibold text-zinc-500 transition hover:text-zinc-300"
+              >
+                Skip setup
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={!canContinue}
+              onClick={next}
+              className="ml-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-500 px-5 text-sm font-bold text-zinc-950 shadow-lg shadow-blue-500/20 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {step === totalSteps - 1 ? "Start" : "Continue"}
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
@@ -727,9 +1337,9 @@ function AddExpenseSheet({
           <button
             type="button"
             onClick={onClose}
-            className="h-9 w-9 rounded-lg text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-100"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-100"
           >
-            ×
+            <X size={17} />
           </button>
         </div>
 
@@ -821,21 +1431,91 @@ function AddExpenseSheet({
 
 function EmptyState() {
   return (
-    <div className="bg-zinc-900/30 border border-dashed border-zinc-800 rounded-2xl p-12 text-center">
-      <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+    <div className="relative overflow-hidden rounded-2xl border border-blue-500/14 bg-gradient-to-br from-zinc-900/90 via-zinc-950/70 to-blue-950/20 p-4 shadow-2xl shadow-black/30 sm:p-6">
+      <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
+      <div className="relative">
+        <div className="mb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-500/16 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-200">
+                <Sparkles size={13} />
+                Preview
+              </div>
+              <h2 className="text-xl font-bold leading-tight text-zinc-50 sm:text-2xl">
+                Your first analysis will surface the money hiding in plain
+                sight.
+              </h2>
+            </div>
+            <CharacterMascot
+              mood="empty"
+              alt="IMAN assistant reviewing empty data"
+              className="h-24 w-24 sm:h-28 sm:w-28"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-zinc-800/80 bg-black/35 p-3">
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-300">
+              <PiggyBank size={17} />
+            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Yearly savings
+            </div>
+            <div className="mt-1 text-2xl font-bold text-emerald-300 tabular-nums">
+              $4,860
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              Example recoverable cash from subscriptions and food drift.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800/80 bg-black/35 p-3">
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-200">
+              <Target size={17} />
+            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Opportunity
+            </div>
+            <div className="mt-1 text-sm font-semibold leading-snug text-zinc-100">
+              Trim $185/mo from discretionary spend.
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              IMAN turns categories into specific next moves.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-blue-500/18 bg-blue-500/[0.06] p-3">
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-200">
+              <TrendingUp size={17} />
+            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Growth preview
+            </div>
+            <div className="mt-1 text-2xl font-bold text-blue-200 tabular-nums">
+              $42k
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              Example 10-year value when surplus is invested consistently.
+            </p>
+          </div>
+        </div>
       </div>
-      <div className="text-zinc-200 font-medium mb-1">Ready when you are</div>
-      <div className="text-sm text-zinc-500">
-        Fill in your monthly numbers on the left and run the analysis.
-      </div>
+      <p className="relative mt-4 text-sm leading-relaxed text-zinc-400">
+        Add income plus one or two real expense categories, then run analysis.
+      </p>
     </div>
   );
 }
 
 function LoadingState() {
   return (
-    <div className="bg-zinc-900/30 border border-zinc-800 rounded-2xl p-12 text-center">
+    <div className="bg-zinc-900/45 border border-zinc-800 rounded-2xl p-8 text-center sm:p-10">
+      <CharacterMascot
+        mood="thinking"
+        alt="IMAN assistant thinking"
+        className="mx-auto mb-4 h-28 w-28"
+      />
       <div className="w-10 h-10 mx-auto mb-4 border-2 border-zinc-800 border-t-blue-400 rounded-full animate-spin" />
       <div className="text-zinc-300 font-medium">Crunching the numbers…</div>
       <div className="text-sm text-zinc-500 mt-1">
@@ -915,12 +1595,11 @@ function Results({ data }: { data: AnalyzeResponse }) {
   const fv20 = investmentProjection.fv20;
   const plausibilityNote =
     data.plausibilityCheck?.triggered === true
-      ? data.plausibilityNote ?? data.plausibilityCheck.note ?? ""
+      ? (data.plausibilityNote ?? data.plausibilityCheck.note ?? "")
       : "";
-  const allocationNote =
-    allocationMode
-      ? "You're generating strong monthly surplus. Focus on allocating it efficiently rather than cutting expenses."
-      : "";
+  const allocationNote = allocationMode
+    ? "You're generating strong monthly surplus. Focus on allocating it efficiently rather than cutting expenses."
+    : "";
   const trustedAdvisorNote = [plausibilityNote, allocationNote, advisorNote]
     .filter(Boolean)
     .join(" ");
@@ -930,7 +1609,7 @@ function Results({ data }: { data: AnalyzeResponse }) {
   }, [initialInvestPct]);
 
   return (
-    <section className="space-y-6 sm:space-y-7">
+    <section className="space-y-5 sm:space-y-6">
       {isDeficit && <DeficitBanner />}
 
       <ScoreCard
@@ -948,7 +1627,7 @@ function Results({ data }: { data: AnalyzeResponse }) {
         />
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard
           label="Net Cash Flow"
           value={netCashFlow}
@@ -981,42 +1660,42 @@ function Results({ data }: { data: AnalyzeResponse }) {
 
       {showOptimizationSections &&
         (insightsLoading ||
-        opportunities.length > 0 ||
-        displayedShortTerm.length > 0 ||
-        longTerm.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-          {(insightsLoading || opportunities.length > 0) && (
-            <Card title="Optimization Opportunities" eyebrow="Insights">
-              {insightsLoading && opportunities.length === 0 ? (
-                <InsightSkeleton lines={3} />
-              ) : (
-                <ul className="space-y-3.5 text-sm text-zinc-200">
-                  {opportunities.map((line, i) => (
-                    <li key={i} className="flex gap-3">
-                      <span className="mt-2 shrink-0 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.45)]" />
-                      <span className="leading-relaxed">{line}</span>
-                    </li>
-                  ))}
-                </ul>
+          opportunities.length > 0 ||
+          displayedShortTerm.length > 0 ||
+          longTerm.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+            {(insightsLoading || opportunities.length > 0) && (
+              <Card title="Optimization Opportunities" eyebrow="Insights">
+                {insightsLoading && opportunities.length === 0 ? (
+                  <InsightSkeleton lines={3} />
+                ) : (
+                  <ul className="space-y-3.5 text-sm text-zinc-200">
+                    {opportunities.map((line, i) => (
+                      <li key={i} className="flex gap-3">
+                        <span className="mt-2 shrink-0 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.45)]" />
+                        <span className="leading-relaxed">{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            )}
+
+            <div className="space-y-4 sm:space-y-5">
+              {displayedShortTerm.length > 0 && (
+                <Card title="Short Term Priorities" eyebrow="0–90 days">
+                  <PriorityList items={displayedShortTerm} />
+                </Card>
               )}
-            </Card>
-          )}
 
-          <div className="space-y-4 sm:space-y-5">
-            {displayedShortTerm.length > 0 && (
-              <Card title="Short Term Priorities" eyebrow="0–90 days">
-                <PriorityList items={displayedShortTerm} />
-              </Card>
-            )}
-
-            {longTerm.length > 0 && (
-              <Card title="Long Term Opportunities" eyebrow="3–12 months">
-                <PriorityList items={longTerm} />
-              </Card>
-            )}
+              {longTerm.length > 0 && (
+                <Card title="Long Term Opportunities" eyebrow="3–12 months">
+                  <PriorityList items={longTerm} />
+                </Card>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {allocationMode && displayedShortTerm.length > 0 && (
         <Card title="Short Term Priorities" eyebrow="Allocation">
@@ -1053,7 +1732,20 @@ function Results({ data }: { data: AnalyzeResponse }) {
           {isDeficit ? (
             <div className="flex items-start gap-3">
               <div className="shrink-0 mt-0.5 w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-zinc-100 mb-1">
@@ -1073,7 +1765,9 @@ function Results({ data }: { data: AnalyzeResponse }) {
                   </div>
                   <div className="text-xl sm:text-2xl font-bold text-emerald-400 tabular-nums break-words">
                     ${investmentProjection.monthlyContribution.toLocaleString()}
-                    <span className="text-sm text-zinc-500 font-normal">/mo</span>
+                    <span className="text-sm text-zinc-500 font-normal">
+                      /mo
+                    </span>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
@@ -1092,12 +1786,15 @@ function Results({ data }: { data: AnalyzeResponse }) {
                   max={100}
                   step={5}
                   value={investPct}
+                  style={getSliderStyle(investPct, 0, 100)}
                   onChange={(e) => setInvestPct(Number(e.target.value))}
-                  className="w-full credit-score-slider"
+                  className="iman-slider w-full"
                   aria-label="Investment allocation percentage"
                 />
               </div>
-              <div className="text-sm sm:text-[11px] text-zinc-500 mt-2">Assumes 7% annual return.</div>
+              <div className="text-sm sm:text-[11px] text-zinc-500 mt-2">
+                Assumes 7% annual return.
+              </div>
             </>
           )}
         </Card>
@@ -1301,16 +1998,18 @@ function AdvisorCard({ note }: { note: string }) {
     <div className="relative overflow-hidden rounded-2xl border border-blue-500/15 bg-gradient-to-br from-blue-500/8 via-blue-500/[0.02] to-zinc-900/40 p-5 sm:p-6 shadow-xl shadow-blue-500/3">
       <div className="absolute -left-16 -top-16 w-56 h-56 rounded-full bg-blue-500/5 blur-3xl pointer-events-none" />
       <div className="relative flex items-start gap-3 sm:gap-4">
-        <div className="shrink-0 w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/18 flex items-center justify-center text-blue-300 shadow-lg shadow-blue-500/5">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-          </svg>
-        </div>
+        <CharacterMascot
+          mood="explaining"
+          alt="IMAN assistant explaining recommendations"
+          className="h-20 w-20 sm:h-24 sm:w-24"
+        />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.18em] text-blue-300/80 font-semibold mb-1.5">
             From your trusted advisor
           </div>
-          <p className="text-sm sm:text-[15px] text-zinc-100 leading-relaxed">{note}</p>
+          <p className="text-sm sm:text-[15px] text-zinc-100 leading-relaxed">
+            {note}
+          </p>
         </div>
       </div>
     </div>
@@ -1320,19 +2019,18 @@ function AdvisorCard({ note }: { note: string }) {
 function DeficitBanner() {
   return (
     <div className="relative overflow-hidden bg-rose-950/40 border border-rose-900/60 rounded-2xl p-4 sm:p-5 flex items-start gap-3 sm:gap-4">
-      <div className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-300">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-          <path d="M12 9v4" />
-          <path d="M12 17h.01" />
-        </svg>
-      </div>
+      <CharacterMascot
+        mood="warning"
+        alt="IMAN assistant warning about financial risk"
+        className="h-20 w-20 sm:h-24 sm:w-24"
+      />
       <div className="min-w-0">
         <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.18em] text-rose-400 mb-1 font-semibold">
           Deficit detected
         </div>
         <div className="text-sm sm:text-base font-semibold text-rose-100 leading-snug">
-          You are currently running a monthly deficit. Priority is to eliminate this gap.
+          You are currently running a monthly deficit. Priority is to eliminate
+          this gap.
         </div>
       </div>
     </div>
@@ -1375,29 +2073,69 @@ function ScoreCard({
   // Stable but Leaking (60-74), Strong (75-87), Elite (88+).
   const tone =
     score < 45
-      ? { text: "text-rose-400", bar: "from-rose-500 via-rose-400 to-rose-300", chip: "bg-rose-500/15 text-rose-300 border-rose-500/30", glow: "bg-rose-500/10" }
+      ? {
+          text: "text-rose-400",
+          bar: "from-rose-500 via-rose-400 to-rose-300",
+          chip: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+          glow: "bg-rose-500/10",
+        }
       : score < 60
-        ? { text: "text-orange-400", bar: "from-orange-500 via-orange-400 to-amber-300", chip: "bg-orange-500/15 text-orange-300 border-orange-500/30", glow: "bg-orange-500/10" }
+        ? {
+            text: "text-orange-400",
+            bar: "from-orange-500 via-orange-400 to-amber-300",
+            chip: "bg-orange-500/15 text-orange-300 border-orange-500/30",
+            glow: "bg-orange-500/10",
+          }
         : score < 75
-          ? { text: "text-amber-400", bar: "from-amber-500 via-yellow-400 to-amber-300", chip: "bg-amber-500/15 text-amber-300 border-amber-500/30", glow: "bg-amber-500/10" }
+          ? {
+              text: "text-amber-400",
+              bar: "from-amber-500 via-yellow-400 to-amber-300",
+              chip: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+              glow: "bg-amber-500/10",
+            }
           : score < 88
-            ? { text: "text-blue-500", bar: "from-blue-500 via-blue-400 to-blue-300", chip: "bg-blue-500/15 text-blue-300 border-blue-500/18", glow: "bg-blue-500/10" }
-            : { text: "text-blue-300", bar: "from-blue-400 via-teal-300 to-blue-200", chip: "bg-blue-400/15 text-blue-200 border-blue-400/24", glow: "bg-blue-400/15" };
+            ? {
+                text: "text-blue-500",
+                bar: "from-blue-500 via-blue-400 to-blue-300",
+                chip: "bg-blue-500/15 text-blue-300 border-blue-500/18",
+                glow: "bg-blue-500/10",
+              }
+            : {
+                text: "text-blue-300",
+                bar: "from-blue-400 via-teal-300 to-blue-200",
+                chip: "bg-blue-400/15 text-blue-200 border-blue-400/24",
+                glow: "bg-blue-400/15",
+              };
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 to-zinc-900/60 border border-zinc-800 rounded-2xl p-6 sm:p-8 lg:p-10 shadow-2xl shadow-black/40">
-      <div className={`absolute -right-24 -top-24 w-72 h-72 rounded-full ${tone.glow} blur-3xl pointer-events-none`} />
+      <div
+        className={`absolute -right-24 -top-24 w-72 h-72 rounded-full ${tone.glow} blur-3xl pointer-events-none`}
+      />
+      {score >= 88 && (
+        <CharacterMascot
+          mood="celebration"
+          alt="IMAN assistant celebrating a strong financial score"
+          className="pointer-events-none absolute right-3 top-3 h-20 w-20 sm:right-5 sm:top-5 sm:h-24 sm:w-24"
+        />
+      )}
       <div className="absolute inset-x-0 -bottom-24 h-48 bg-gradient-to-t from-zinc-950/40 to-transparent pointer-events-none" />
       <div className="relative flex flex-col items-center text-center">
         <div className="text-[13px] sm:text-[11px] uppercase tracking-[0.28em] text-zinc-500 mb-3">
           Financial Score
         </div>
-        <div className={`text-7xl sm:text-8xl lg:text-9xl font-black leading-none tabular-nums tracking-tight ${tone.text}`}>
+        <div
+          className={`text-7xl sm:text-8xl lg:text-9xl font-black leading-none tabular-nums tracking-tight ${tone.text}`}
+        >
           {displayScore}
-          <span className="text-2xl sm:text-3xl text-zinc-700 font-bold align-top ml-1">/100</span>
+          <span className="text-2xl sm:text-3xl text-zinc-700 font-bold align-top ml-1">
+            /100
+          </span>
         </div>
         <div className="mt-4">
-          <span className={`text-xs sm:text-[13px] font-semibold uppercase tracking-[0.14em] px-3 py-1 rounded-full border ${tone.chip}`}>
+          <span
+            className={`text-xs sm:text-[13px] font-semibold uppercase tracking-[0.14em] px-3 py-1 rounded-full border ${tone.chip}`}
+          >
             {label}
           </span>
         </div>
@@ -1491,14 +2229,25 @@ function buildScoreMoves(
   const byName = new Map(breakdown.map((item) => [item.name, item]));
   const seen = new Set<string>();
   const moves = priorities
-    .filter((priority) => priority.monthlyImpact == null || priority.monthlyImpact > 0)
+    .filter(
+      (priority) =>
+        priority.monthlyImpact == null || priority.monthlyImpact > 0,
+    )
     .map((priority) => {
       const areaName = recommendationScoreArea(priority.text);
       const area = byName.get(areaName);
       const gap = area ? Math.max(0, area.max - area.points) : 0;
-      const impact = typeof priority.monthlyImpact === "number" ? priority.monthlyImpact : monthlySavings;
-      const estimate = Math.max(1, Math.min(8, Math.ceil(gap * 0.45 || impact / 250)));
-      const cleaned = priority.text.split(" Why it matters:")[0].replace(/\.$/, "");
+      const impact =
+        typeof priority.monthlyImpact === "number"
+          ? priority.monthlyImpact
+          : monthlySavings;
+      const estimate = Math.max(
+        1,
+        Math.min(8, Math.ceil(gap * 0.45 || impact / 250)),
+      );
+      const cleaned = priority.text
+        .split(" Why it matters:")[0]
+        .replace(/\.$/, "");
       return {
         areaName,
         text: cleaned,
@@ -1521,7 +2270,10 @@ function buildScoreMoves(
     .map((item) => ({
       areaName: item.name,
       text: `Improve ${item.name.toLowerCase()}`,
-      estimate: Math.max(1, Math.min(6, Math.ceil((item.max - item.points) * 0.4))),
+      estimate: Math.max(
+        1,
+        Math.min(6, Math.ceil((item.max - item.points) * 0.4)),
+      ),
     }));
 }
 
@@ -1547,10 +2299,26 @@ function ScoreExplanationCard({
     ...positives.slice(0, Math.max(0, 3 - Math.min(2, negatives.length))),
   ].slice(0, 3);
   const componentParts = [
-    { label: "Cash retention", item: findPart("Cash Retention"), mode: "strength" as const },
-    { label: "Waste ratio", item: findPart("Controllable Waste"), mode: "pressure" as const },
-    { label: "Debt burden", item: findPart("Debt Burden"), mode: "pressure" as const },
-    { label: "Subscriptions", item: findPart("Subscription Bloat"), mode: "pressure" as const },
+    {
+      label: "Cash retention",
+      item: findPart("Cash Retention"),
+      mode: "strength" as const,
+    },
+    {
+      label: "Waste ratio",
+      item: findPart("Controllable Waste"),
+      mode: "pressure" as const,
+    },
+    {
+      label: "Debt burden",
+      item: findPart("Debt Burden"),
+      mode: "pressure" as const,
+    },
+    {
+      label: "Subscriptions",
+      item: findPart("Subscription Bloat"),
+      mode: "pressure" as const,
+    },
   ];
   const moves = buildScoreMoves(priorities, breakdown, monthlySavings);
 
@@ -1730,9 +2498,7 @@ function AnalysisConfidencePanel({
             </p>
           )}
           {confidenceNote && (
-            <p className="mt-1 text-zinc-400">
-              {confidenceNote}
-            </p>
+            <p className="mt-1 text-zinc-400">{confidenceNote}</p>
           )}
         </div>
       </div>
@@ -1778,16 +2544,28 @@ function StatCard({
           ? "↑"
           : "↓";
   return (
-    <div className="min-w-0 bg-zinc-900/75 border border-zinc-700/70 rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-600 hover:shadow-black/30 transition">
+    <div className="min-w-0 bg-zinc-900/75 border border-zinc-700/70 rounded-2xl p-4 shadow-lg shadow-black/20 hover:border-zinc-600 hover:shadow-black/30 transition">
       <div className="flex items-center justify-between mb-2 gap-2">
-        <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.18em] text-zinc-400 truncate font-medium">{label}</div>
-        <span className={`shrink-0 text-sm font-bold ${arrowColor}`}>{arrow}</span>
+        <div className="text-[13px] sm:text-[10px] uppercase tracking-[0.18em] text-zinc-400 truncate font-medium">
+          {label}
+        </div>
+        <span className={`shrink-0 text-sm font-bold ${arrowColor}`}>
+          {arrow}
+        </span>
       </div>
-      <div className={`text-2xl sm:text-3xl font-bold tabular-nums break-words text-right sm:text-left ${valueColor}`}>
+      <div
+        className={`text-3xl font-black tabular-nums break-words ${valueColor}`}
+      >
         ${value.toLocaleString()}
-        {suffix && <span className="text-xs text-zinc-500 font-normal ml-0.5">{suffix}</span>}
+        {suffix && (
+          <span className="text-xs text-zinc-500 font-normal ml-0.5">
+            {suffix}
+          </span>
+        )}
       </div>
-      {hint && <div className="text-sm sm:text-[11px] text-zinc-500 mt-1.5 truncate">{hint}</div>}
+      {hint && (
+        <div className="text-xs text-zinc-500 mt-1.5 truncate">{hint}</div>
+      )}
     </div>
   );
 }
@@ -1807,10 +2585,12 @@ function Card({
     <div
       className={`min-w-0 bg-zinc-900/75 border ${accent ? "border-blue-500/18" : "border-zinc-700/70"} rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/20 hover:border-zinc-600 hover:shadow-black/30 transition`}
     >
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-sm font-semibold text-zinc-100">{title}</div>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="text-[15px] font-bold text-zinc-100">{title}</div>
         {eyebrow && (
-          <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500">{eyebrow}</div>
+          <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500">
+            {eyebrow}
+          </div>
         )}
       </div>
       {children}
@@ -1832,13 +2612,19 @@ function Subtile({
       ? "text-emerald-400"
       : accent === "red"
         ? "text-rose-400"
-      : accent === "blue"
-        ? "text-blue-500"
-        : "text-zinc-100";
+        : accent === "blue"
+          ? "text-blue-500"
+          : "text-zinc-100";
   return (
     <div className="min-w-0 bg-zinc-950/70 border border-zinc-700/70 rounded-xl p-3.5 sm:p-4">
-      <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">{label}</div>
-      <div className={`text-xl sm:text-2xl font-bold tabular-nums break-words text-right sm:text-left ${valueColor}`}>{value}</div>
+      <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">
+        {label}
+      </div>
+      <div
+        className={`text-xl sm:text-2xl font-bold tabular-nums break-words text-right sm:text-left ${valueColor}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -1860,7 +2646,9 @@ function ProjectionTile({
           : "border-zinc-800/80"
       }`}
     >
-      <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">{years}</div>
+      <div className="text-[13px] sm:text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">
+        {years}
+      </div>
       <div
         className={`text-base sm:text-lg lg:text-xl font-bold tabular-nums break-words ${
           highlight ? "text-blue-500" : "text-zinc-100"
@@ -1889,7 +2677,9 @@ function SingleField({
         {label}
       </span>
       <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-sm">$</span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-sm">
+          $
+        </span>
         <input
           type="number"
           inputMode="decimal"
@@ -1923,7 +2713,9 @@ function CategoryCard({
   const amountInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const pendingFocus = useRef<{ idx: number; field: keyof Item } | null>(null);
   const update = (idx: number, field: keyof Item, value: string) =>
-    setItems(items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
+    setItems(
+      items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)),
+    );
   const remove = (idx: number) => setItems(items.filter((_, i) => i !== idx));
   const addBlank = () => {
     pendingFocus.current = { idx: items.length, field: "name" };
@@ -1960,55 +2752,63 @@ function CategoryCard({
   const availableSuggestions = CATEGORY_DEFAULTS[name].filter(
     (s) => !usedNames.has(s.toLowerCase()),
   );
+  const Icon = CATEGORY_ICONS[name];
 
   const headerTitleClass =
-    priority === "high"
-      ? "text-zinc-100 text-[12px]"
-      : "text-zinc-300 text-sm sm:text-[11px]";
-  const cardBorderClass =
-    priority === "high"
-      ? "border-blue-500/20"
+    priority === "high" ? "text-zinc-100" : "text-zinc-300";
+  const cardBorderClass = isExpanded
+    ? "border-blue-500/24"
+    : priority === "high"
+      ? "border-blue-500/16"
       : priority === "low"
-        ? "border-zinc-800/60"
-        : "border-zinc-800/80";
-  const cardBgClass = priority === "low" ? "bg-zinc-950/40" : "bg-zinc-950/60";
+        ? "border-zinc-800/55"
+        : "border-zinc-800/75";
+  const cardBgClass = isExpanded
+    ? "bg-blue-500/[0.045] shadow-lg shadow-blue-500/3"
+    : priority === "low"
+      ? "bg-zinc-950/35"
+      : "bg-zinc-950/55";
 
   return (
-    <div className={`${cardBgClass} border ${cardBorderClass} rounded-xl`}>
+    <div
+      className={`${cardBgClass} border ${cardBorderClass} rounded-xl transition-all duration-200`}
+    >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isExpanded}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-zinc-900/40 rounded-xl transition"
+        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left rounded-xl transition hover:bg-zinc-900/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
       >
-        <span className="flex items-center gap-2 min-w-0">
+        <span className="flex items-center gap-2.5 min-w-0">
           <span
-            className={`inline-block transition-transform text-zinc-600 text-[13px] sm:text-[10px] ${
-              isExpanded ? "rotate-90" : ""
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition ${
+              isExpanded
+                ? "border-blue-500/22 bg-blue-500/12 text-blue-200"
+                : "border-zinc-800 bg-zinc-900/70 text-zinc-500"
             }`}
             aria-hidden
           >
-            ▶
+            <Icon size={16} />
           </span>
-          {priority === "high" && (
-            <span
-              className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0"
-              aria-hidden
-            />
-          )}
           <span
-            className={`uppercase tracking-[0.14em] font-semibold ${headerTitleClass}`}
+            className={`text-[12px] uppercase tracking-[0.14em] font-semibold ${headerTitleClass}`}
           >
             {name}
           </span>
         </span>
-        {total > 0 && (
-          <span className="text-sm sm:text-[11px] text-zinc-400 tabular-nums shrink-0">
-            <span className="text-zinc-200 font-semibold">
+        <span className="flex shrink-0 items-center gap-2">
+          {total > 0 && (
+            <span className="rounded-full border border-zinc-800 bg-black/25 px-2 py-1 text-[11px] font-semibold text-zinc-200 tabular-nums">
               ${total.toLocaleString()}
             </span>
-          </span>
-        )}
+          )}
+          <ChevronRight
+            size={17}
+            className={`text-zinc-500 transition-transform duration-200 ${
+              isExpanded ? "rotate-90 text-blue-300" : ""
+            }`}
+          />
+        </span>
       </button>
 
       {isExpanded && (
@@ -2049,9 +2849,9 @@ function CategoryCard({
                     type="button"
                     onClick={() => remove(idx)}
                     aria-label="Remove item"
-                    className="shrink-0 w-8 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                    className="flex h-9 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 transition hover:bg-rose-500/10 hover:text-rose-400"
                   >
-                    ×
+                    <X size={15} />
                   </button>
                 </div>
               ))}
@@ -2065,9 +2865,10 @@ function CategoryCard({
                   key={s}
                   type="button"
                   onClick={() => addNamed(s)}
-                  className="text-sm sm:text-[11px] px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-blue-300 hover:border-blue-500/40 transition"
+                  className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-blue-300 hover:border-blue-500/40 transition"
                 >
-                  + {s}
+                  <Plus size={12} />
+                  {s}
                 </button>
               ))}
             </div>
@@ -2076,9 +2877,10 @@ function CategoryCard({
           <button
             type="button"
             onClick={addBlank}
-            className="text-sm sm:text-[11px] font-medium text-blue-400 hover:text-blue-300 transition"
+            className="inline-flex items-center gap-1.5 text-sm sm:text-[11px] font-semibold text-blue-300 hover:text-blue-200 transition"
           >
-            + Add item
+            <Plus size={14} />
+            Add item
           </button>
         </div>
       )}

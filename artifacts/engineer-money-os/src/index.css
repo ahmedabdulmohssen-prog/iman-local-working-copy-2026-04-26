@@ -1,10 +1,236 @@
 @import "tailwindcss";
 
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   min-height: 100%;
 }
 
 body {
   font-family: Inter, Arial, sans-serif;
+}
+
+.iman-character-image {
+  background-color: transparent;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.2))
+    drop-shadow(0 10px 24px rgba(2, 132, 199, 0.12))
+    drop-shadow(0 0 18px rgba(186, 230, 253, 0.1));
+}
+
+.iman-onboarding-hero-mascot {
+  background-color: transparent;
+}
+
+.iman-onboarding-hero-mascot::before {
+  content: "";
+  position: absolute;
+  inset: 6% 0% -8%;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle, rgba(186, 230, 253, 0.07), transparent 66%),
+    radial-gradient(circle, rgba(37, 99, 235, 0.075), transparent 76%);
+  filter: blur(28px);
+  opacity: 0.72;
+}
+
+.iman-onboarding-hero-mascot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -0.15rem;
+  width: min(15rem, 72%);
+  height: 2.6rem;
+  border-radius: 9999px;
+  background: radial-gradient(
+    ellipse,
+    rgba(15, 23, 42, 0.42),
+    rgba(37, 99, 235, 0.08) 42%,
+    transparent 72%
+  );
+  filter: blur(10px);
+  opacity: 0.58;
+  transform: translateX(-50%);
+}
+
+.iman-onboarding-income-companion {
+  background-color: transparent;
+}
+
+.iman-onboarding-income-companion::before {
+  content: "";
+  position: absolute;
+  inset: -24% -18% -22%;
+  border-radius: 9999px;
+  background:
+    radial-gradient(ellipse at 50% 56%, rgba(186, 230, 253, 0.055), transparent 66%),
+    radial-gradient(ellipse at 46% 62%, rgba(37, 99, 235, 0.07), transparent 78%),
+    radial-gradient(ellipse at 62% 44%, rgba(14, 165, 233, 0.04), transparent 62%);
+  filter: blur(36px);
+  opacity: 0.72;
+  animation: iman-income-ambient 12s ease-in-out infinite alternate;
+}
+
+.iman-onboarding-income-companion::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.05rem;
+  width: min(9rem, 54%);
+  height: 1.6rem;
+  border-radius: 9999px;
+  background: radial-gradient(
+    ellipse,
+    rgba(15, 23, 42, 0.38),
+    rgba(37, 99, 235, 0.075) 42%,
+    transparent 72%
+  );
+  filter: blur(8px);
+  opacity: 0.52;
+  transform: translateX(-50%);
+}
+
+.iman-income-insight-rotation {
+  background-color: transparent;
+}
+
+.iman-onboarding-income-blend {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(8, 47, 73, 0.035) 28%,
+    rgba(15, 23, 42, 0.12) 68%,
+    rgba(2, 6, 23, 0.02) 100%
+  );
+}
+
+.iman-income-insight-text {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  opacity: 0.88;
+  transition: opacity 2600ms ease-in-out;
+}
+
+.iman-income-insight-text.is-transitioning {
+  opacity: 0;
+}
+
+.iman-onboarding-wave {
+  bottom: 8rem;
+  animation: iman-wave-drift 10s ease-in-out infinite alternate;
+  transform-origin: center bottom;
+}
+
+@keyframes iman-income-ambient {
+  from {
+    transform: translate3d(-0.12rem, 0.08rem, 0) scale(1);
+    opacity: 0.66;
+  }
+
+  to {
+    transform: translate3d(0.12rem, -0.04rem, 0) scale(1.025);
+    opacity: 0.78;
+  }
+}
+
+@keyframes iman-wave-drift {
+  from {
+    transform: translate3d(-0.35rem, 0.08rem, 0) scaleX(1.01);
+    opacity: 0.8;
+  }
+
+  to {
+    transform: translate3d(0.35rem, -0.04rem, 0) scaleX(1.015);
+    opacity: 0.9;
+  }
+}
+
+.iman-slider {
+  --slider-progress: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 0.55rem;
+  border-radius: 9999px;
+  background:
+    linear-gradient(
+      90deg,
+      #38bdf8 0%,
+      #2563eb var(--slider-progress),
+      transparent var(--slider-progress)
+    ),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.95), rgba(39, 39, 42, 0.95));
+  border: 1px solid rgba(59, 130, 246, 0.16);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  outline: none;
+  transition:
+    filter 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.iman-slider:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.65),
+    0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.iman-slider:focus-visible {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.65),
+    0 0 0 4px rgba(59, 130, 246, 0.22);
+}
+
+.iman-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #e0f2fe, #60a5fa 42%, #1d4ed8);
+  border: 2px solid rgba(219, 234, 254, 0.9);
+  box-shadow:
+    0 4px 14px rgba(37, 99, 235, 0.45),
+    0 0 0 5px rgba(59, 130, 246, 0.14);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.iman-slider:active::-webkit-slider-thumb {
+  transform: scale(1.08);
+  box-shadow:
+    0 4px 18px rgba(37, 99, 235, 0.55),
+    0 0 0 7px rgba(59, 130, 246, 0.18);
+}
+
+.iman-slider::-moz-range-track {
+  height: 0.55rem;
+  border-radius: 9999px;
+  background: rgba(39, 39, 42, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.16);
+}
+
+.iman-slider::-moz-range-progress {
+  height: 0.55rem;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #38bdf8, #2563eb);
+}
+
+.iman-slider::-moz-range-thumb {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background: #60a5fa;
+  border: 2px solid rgba(219, 234, 254, 0.9);
+  box-shadow:
+    0 4px 14px rgba(37, 99, 235, 0.45),
+    0 0 0 5px rgba(59, 130, 246, 0.14);
 }

@@ -27,6 +27,22 @@
 - Mobile first mindset
 - Keep interface clean and premium
 
+## Character System Rules
+- Use the IMAN character system as the official assistant mascot and visual guide
+- Use only the provided PNG assets from `artifacts/engineer-money-os/public/characters/`
+- Never redesign, restyle, redraw, crop, filter, or alter the character
+- Maintain identical facial features, hair, glasses, skin tone, outfit, and proportions
+- Keep the clean semi-flat illustrated style consistent across the UI
+- `iman-master-sheet.png` is reference-only for character design consistency and must never be imported, rendered, animated, rotated, or used in runtime UI state logic
+- Map character emotions by state:
+  - `iman-neutral.png`: default dashboard and assistant greeting
+  - `iman-thinking.png`: analysis, loading, and reasoning states
+  - `iman-explaining.png`: recommendations, coaching, and tutorials
+  - `iman-warning.png`: overspending alerts, debt risk, and negative trends
+  - `iman-celebration.png`: savings wins, score improvements, and milestones
+  - `iman-mobile-companion.png`: AI chat assistant or mobile widgets
+  - `iman-empty-state.png`: no transactions or no data states
+
 ## Recommendation Rules
 - Max 2 to 3 actions per report
 - Preserve lifestyle where possible
